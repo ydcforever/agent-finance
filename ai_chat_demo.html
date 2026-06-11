@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Chat Stream Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; background: #f7f8fb; color: #222; }
+    .container { max-width: 780px; margin: 0 auto; padding: 24px; background: white; border-radius: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.08); }
+    h1 { margin-top: 0; }
+    label { display: block; margin: 16px 0 8px; font-weight: 600; }
+    textarea, input[type=text], input[type=file] { width: 100%; padding: 10px 12px; border: 1px solid #d7dce3; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+    button { margin-top: 16px; padding: 12px 20px; border: none; border-radius: 8px; background: #2563eb; color: white; font-size: 15px; cursor: pointer; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    .output { margin-top: 20px; padding: 16px; min-height: 180px; background: #111827; color: #f8fafc; border-radius: 10px; white-space: pre-wrap; overflow-wrap: break-word; }
+    .hint { color: #475569; font-size: 13px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI Chat 流式接口 Demo</h1>
+    <p>本页面演示如何调用 <code>POST /yyy/ai/chat</code>，并实时展示流式返回内容。</p>
+
+    <label for="content">content</label>
+    <textarea id="content" rows="4" placeholder="请输入对话内容，例如：请分析这份财务数据。"></textarea>
+
+    <label for="files">files（可选，支持 Excel 上传）</label>
+    <input id="files" type="file" multiple />
+    <div class="hint">如果上传 Excel，会将文件解析为 Markdown 并注入到 prompt 上下文中。</div>
+
+    <button id="sendBtn">开始流式调用</button>
+
+    <div class="output" id="output">等待请求...</div>
+  </div>
+
+  <script>
+    const sendBtn = document.getElementById('sendBtn');
+    const output = document.getElementById('output');
+    const contentEl = document.getElementById('content');
+    const filesEl = document.getElementById('files');
+
+    const apiUrl = '/yyy/ai/chat';
+
+    function appendLog(text) {
+      output.textContent += text;
+      output.scrollTop = output.scrollHeight;
+    }
+
+    async function streamRequest() {
+      output.textContent = '';
+      sendBtn.disabled = true;
+
+      const formData = new FormData();
+      formData.append('content', contentEl.value || '请简单回答：你好');
+      for (const file of filesEl.files) {
+        formData.append('files', file, file.name);
+      }
+
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          appendLog('请求失败：' + response.status + '\n' + errorText);
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffered = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffered += decoder.decode(value, { stream: true });
+
+          let lines = buffered.split(/\r?\n/);
+          buffered = lines.pop();
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            if (line.startsWith('data:')) {
+              const raw = line.slice(5).trim();
+              try {
+                const event = JSON.parse(raw);
+                if (event.type === 'chunk') {
+                  appendLog(event.text);
+                } else if (event.type === 'done') {
+                  appendLog('\n\n[完成] stop_reason=' + event.stop_reason + '\n');
+                } else if (event.type === 'error') {
+                  appendLog('\n\n[错误] ' + event.message + '\n');
+                }
+              } catch (err) {
+                appendLog('\n[解析失败] ' + err.message + '\nRaw: ' + raw + '\n');
+              }
+            }
+          }
+        }
+      } catch (err) {
+        appendLog('请求异常：' + err.message + '\n');
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    sendBtn.addEventListener('click', streamRequest);
+  </script>
+</body>
+</html>

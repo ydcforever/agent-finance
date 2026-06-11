@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request, status
 from fastapi.concurrency import asynccontextmanager
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi_pagination import add_pagination
 from scalar_fastapi import Theme, get_scalar_api_reference
 
@@ -20,6 +22,7 @@ from server.routers import (
     private_txs_router,
     cash_flow_router,
     tax_expense_router,
+    ai_chat_router,
 )
 
 @asynccontextmanager
@@ -30,7 +33,20 @@ async def lifespan(app: FastAPI):
 
 # ================= 4. FastAPI 接口层 =================
 app = FastAPI(lifespan=lifespan, swagger_ui_parameters={"defaultModelExpandDepth": 5, "defaultModelsExpandDepth": 5})
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 add_pagination(app)  # 添加分页功能
+
+app.mount('/static', StaticFiles(directory='.'), name='static')
+
+@app.get('/demo', include_in_schema=False)
+async def demo_html():
+    return FileResponse('ai_chat_demo.html')
 
 @app.get("/scalar", include_in_schema=False)
 async def scalar_html():
@@ -51,6 +67,7 @@ app.include_router(loan_router)
 app.include_router(private_txs_router)
 app.include_router(cash_flow_router)
 app.include_router(tax_expense_router)
+app.include_router(ai_chat_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

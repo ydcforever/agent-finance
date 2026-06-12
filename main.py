@@ -53,6 +53,10 @@ async def demo_html():
 async def coze_demo_html():
     return FileResponse('server/coze/coze_demo.html')
 
+@app.get('/coze_ui', include_in_schema=False)
+async def coze_ui_html():
+    return FileResponse('server/coze/index.html')
+
 @app.get("/scalar", include_in_schema=False)
 async def scalar_html():
     return get_scalar_api_reference(

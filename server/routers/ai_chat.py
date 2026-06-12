@@ -43,9 +43,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/yyy/ai", tags=["AI聊天"])
 
-client = CloudAgentClient(api_key="ck_fns0v3cj85c0.wJgHcpGwka0JXdp9wWiYb3SeLASXkrd24IJJtqjXc8M")
+client = CloudAgentClient(api_key="ck_fns0v3cj85c0.wJgHcpGwka0JXdp9wWiYb3SeLASXkrd24IJJtqjXc8M",
+                           source_app="formula-finance")
 
-MAX_SSE_CHUNK_SIZE = 1500
+MAX_SSE_CHUNK_SIZE = 4096
 
 
 def _split_text_to_chunks(text: str, max_chunk: int) -> List[str]:
@@ -121,12 +122,22 @@ def build_message_with_excel(
     return [TextContentBlock(type="text", text=full_prompt)]
 
 
+_RESOURCE_LINK_HINT = (
+    "当你需要向用户返回文件（如 Excel、PDF、图片等）时，"
+    "请始终使用 resource_link 类型（只返回文件的访问 URI），"
+    "不要将文件内容以 base64 编码直接内嵌在消息体中（即不使用 resource 内嵌类型）。"
+    "直接内嵌大文件会使单条 SSE 消息超过服务端 64KB 传输限制，导致连接中断。"
+    "文件 URI 示例：oss://bucket/path/to/file.xlsx 或 https://cdn.example.com/file.pdf"
+)
+
+
 async def create_runtime():
     manifest = (
         ManifestBuilder()
         .id("agent_01KSSBM63DYZ563SPK088Y3YWW")
         .name("My Agent")
         .version("1.0")
+        .system_prompt(_RESOURCE_LINK_HINT)
         .build()
     )
     return await client.runtimes.create(
@@ -165,13 +176,148 @@ async def stream_ai_chat(
             session = runtime.sessions.default()
 
             def on_chunk(notification: SessionNotification) -> None:
-                update = notification.update
-                if update.session_update == "agent_message_chunk" and getattr(update.content, "type", None) == "text":
-                    text = update.content.text or ""
-                    for part in _split_text_to_chunks(text, MAX_SSE_CHUNK_SIZE):
-                        queue.put_nowait(json.dumps({"type": "chunk", "text": part}, ensure_ascii=False))
+                try:
+                    _on_chunk_impl(notification)
+                except Exception:
+                    # 单个 chunk 解析失败不应中断整个流
+                    logger.exception("[ai_chat] on_chunk 回调异常，已跳过")
 
-            response = await session.prompt(message_blocks, PromptOptions(on_chunk=on_chunk))
+            def _on_chunk_impl(notification: SessionNotification) -> None:
+                """基于 ACP 官方协议 SessionUpdate 变体处理通知。
+                
+                SessionUpdate 联合类型（由 session_update 字段区分）：
+                - agent_message_chunk (AgentMessageChunk): content: ContentBlock (text/resource_link/resource/image/audio)
+                - agent_thought_chunk (AgentThoughtChunk): 同上（思维链）
+                - user_message_chunk  (UserMessageChunk):  同上（回显用户消息）
+                - tool_call           (ToolCallStart):      tool_call_id, title, kind, status, content, locations, raw_input
+                - tool_call_update    (ToolCallProgress):    tool_call_id + 可选 content/status/raw_input/raw_output/locations
+                - plan                (AgentPlanUpdate):    entries[]
+                - usage_update        (UsageUpdate):        used, size, cost?
+                - current_mode_update (CurrentModeUpdate):  current_mode_id
+                - config_option_update(ConfigOptionUpdate): config_options
+                - available_commands_update: available_commands
+                - session_info_update: session 元信息
+                """
+                update = notification.update
+                session_update = getattr(update, "session_update", None)
+
+                # ---- agent_message_chunk / agent_thought_chunk ----
+                # 流式输出：文本 / resource_link / resource
+                if session_update in ("agent_message_chunk", "agent_thought_chunk"):
+                    content = getattr(update, "content", None)
+                    if content is None:
+                        return
+                    content_type = getattr(content, "type", None)
+
+                    # 纯文本
+                    if content_type == "text":
+                        text = getattr(content, "text", "") or ""
+                        for part in _split_text_to_chunks(text, MAX_SSE_CHUNK_SIZE):
+                            queue.put_nowait(json.dumps(
+                                {"type": "chunk", "text": part}, ensure_ascii=False
+                            ))
+
+                    # 制品引用 —— 官方 ContentBlock: resource_link
+                    elif content_type == "resource_link":
+                        queue.put_nowait(json.dumps({
+                            "type":        "artifact",
+                            "name":        getattr(content, "name", ""),
+                            "uri":         getattr(content, "uri", ""),
+                            "mime_type":   getattr(content, "mime_type", None),
+                            "title":       getattr(content, "title", None),
+                            "description": getattr(content, "description", None),
+                            "size":        getattr(content, "size", None),
+                        }, ensure_ascii=False))
+
+                    # 内嵌资源 —— 官方 ContentBlock: resource
+                    elif content_type == "resource":
+                        resource = getattr(content, "resource", None)
+                        if resource is not None:
+                            mime = getattr(resource, "mime_type", None)
+                            uri = getattr(resource, "uri", "")
+                            blob = getattr(resource, "blob", None)
+                            text_res = getattr(resource, "text", None)
+                            data_val = blob or text_res or ""
+                            enc = "base64" if blob is not None else "text"
+                            queue.put_nowait(json.dumps({
+                                "type":      "artifact_embedded",
+                                "mime_type": mime,
+                                "uri":       uri,
+                                "data":      data_val,
+                                "encoding":  enc,
+                            }, ensure_ascii=False))
+
+                # ---- tool_call: 工具调用开始 ----
+                elif session_update == "tool_call":
+                    kind = getattr(update, "kind", None)
+                    title = getattr(update, "title", "")
+                    tool_call_id = getattr(update, "tool_call_id", "")
+                    locations = getattr(update, "locations", None) or []
+                    raw_input = getattr(update, "raw_input", None) or {}
+
+                    # 从 raw_input 提取 file_path（Write 工具）
+                    file_path = (
+                        raw_input.get("file_path", "")
+                        if isinstance(raw_input, dict)
+                        else ""
+                    )
+
+                    # 从 locations 提取路径
+                    paths = (
+                        [loc.path for loc in locations if hasattr(loc, "path")]
+                        if locations else []
+                    )
+                    if not paths and file_path:
+                        paths = [file_path]
+
+                    for p in paths:
+                        queue.put_nowait(json.dumps({
+                            "type":         "artifact_writing",
+                            "tool_call_id": tool_call_id,
+                            "path":         p,
+                            "title":        title,
+                            "kind":         kind,
+                        }, ensure_ascii=False))
+
+                # ---- tool_call_update: 工具调用状态更新 ----
+                elif session_update == "tool_call_update":
+                    status = getattr(update, "status", None)
+                    tool_call_id = getattr(update, "tool_call_id", "")
+
+                    # 工具完成
+                    if status == "completed":
+                        queue.put_nowait(json.dumps({
+                            "type":         "artifact_done",
+                            "tool_call_id": tool_call_id,
+                        }, ensure_ascii=False))
+
+                        # 同时检查 tool_call_update.content 里是否有 resource_link 制品
+                        tc_content = getattr(update, "content", None) or []
+                        for item in tc_content:
+                            if hasattr(item, "type") and item.type == "content":
+                                inner = getattr(item, "content", None)
+                                if inner is not None and getattr(inner, "type", None) == "resource_link":
+                                    queue.put_nowait(json.dumps({
+                                        "type":        "artifact",
+                                        "name":        getattr(inner, "name", ""),
+                                        "uri":         getattr(inner, "uri", ""),
+                                        "mime_type":   getattr(inner, "mime_type", None),
+                                        "title":       getattr(inner, "title", None),
+                                        "description": getattr(inner, "description", None),
+                                        "size":        getattr(inner, "size", None),
+                                    }, ensure_ascii=False))
+
+                    # 工具失败
+                    elif status == "failed":
+                        queue.put_nowait(json.dumps({
+                            "type":         "artifact_failed",
+                            "tool_call_id": tool_call_id,
+                        }, ensure_ascii=False))
+
+            response = await session.prompt(
+                message_blocks,
+                PromptOptions(on_chunk=on_chunk, timeout_ms=120_000),
+            )
             queue.put_nowait(json.dumps({"type": "done", "stop_reason": response.stop_reason}))
         except Exception as exc:
             queue.put_nowait(json.dumps({"type": "error", "message": str(exc)}))

@@ -22,7 +22,8 @@ from server.routers import (
     private_txs_router,
     cash_flow_router,
     tax_expense_router,
-    ai_chat_router,
+    ai_chat_workbuddy_router,
+    ai_chat_coze_router,
 )
 
 @asynccontextmanager
@@ -44,9 +45,13 @@ add_pagination(app)  # 添加分页功能
 
 app.mount('/static', StaticFiles(directory='.'), name='static')
 
-@app.get('/demo', include_in_schema=False)
+@app.get('/workbuddy', include_in_schema=False)
 async def demo_html():
-    return FileResponse('ai_chat_demo.html')
+    return FileResponse('server/workbuddy/workbuddy_demo.html')
+
+@app.get('/coze', include_in_schema=False)
+async def coze_demo_html():
+    return FileResponse('server/coze/coze_demo.html')
 
 @app.get("/scalar", include_in_schema=False)
 async def scalar_html():
@@ -67,7 +72,8 @@ app.include_router(loan_router)
 app.include_router(private_txs_router)
 app.include_router(cash_flow_router)
 app.include_router(tax_expense_router)
-app.include_router(ai_chat_router)
+app.include_router(ai_chat_workbuddy_router)
+app.include_router(ai_chat_coze_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -87,4 +93,3 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "data": error_messages
         }
     )
-    

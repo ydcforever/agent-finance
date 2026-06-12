@@ -41,7 +41,7 @@ PromptResponse.model_rebuild(force=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/yyy/ai", tags=["AI聊天"])
+router = APIRouter(prefix="/yyy/workbuddy", tags=["AI聊天"])
 
 client = CloudAgentClient(api_key="ck_fns0v3cj85c0.wJgHcpGwka0JXdp9wWiYb3SeLASXkrd24IJJtqjXc8M",
                            source_app="formula-finance")

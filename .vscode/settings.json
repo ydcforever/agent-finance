@@ -3,7 +3,7 @@
     "python-envs.defaultPackageManager": "ms-python.python:conda",
     "python-envs.pythonProjects": [
         {
-            "path": "workbuddy.py",
+            "path": "server/workbuddy/workbuddy.py",
             "envManager": "ms-python.python:conda",
             "packageManager": "ms-python.python:conda"
         }

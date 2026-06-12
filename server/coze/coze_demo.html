@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coze AI 对话测试</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                   "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+    .page { width: 100%; max-width: 960px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* ── 通用卡片 ── */
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.06);
+      padding: 24px 28px;
+    }
+    .card-title {
+      font-size: 15px; font-weight: 600; margin-bottom: 18px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── 表单控件 ── */
+    label { display: block; font-size: 13px; font-weight: 500; color: #475569; margin-bottom: 6px; }
+    textarea {
+      width: 100%; padding: 10px 14px; min-height: 80px;
+      border: 1.5px solid #e2e8f0; border-radius: 10px;
+      font-size: 14px; resize: vertical; font-family: inherit;
+      transition: border-color .15s;
+    }
+    textarea:focus {
+      outline: none; border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+    }
+    .hint { font-size: 12px; color: #94a3b8; margin-top: 5px; }
+
+    /* ── 上传面板 ── */
+    .upload-panel {
+      border: 2px dashed #e2e8f0; border-radius: 10px;
+      padding: 20px; text-align: center; cursor: pointer;
+      transition: border-color .15s, background .15s;
+      background: #fafafa;
+    }
+    .upload-panel:hover { border-color: #93c5fd; background: #eff6ff; }
+    .upload-panel input[type=file] { display: none; }
+    .upload-icon { font-size: 32px; line-height: 1; margin-bottom: 8px; }
+    .upload-text { font-size: 13px; color: #64748b; }
+    .upload-text strong { color: #2563eb; }
+    .upload-status { margin-top: 10px; font-size: 13px; }
+    .upload-status.ok  { color: #16a34a; }
+    .upload-status.err { color: #dc2626; }
+
+    /* ── 附件标签列表 ── */
+    .attachment-section { margin-top: 14px; }
+    .attachment-list {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      min-height: 36px;
+    }
+    .attachment-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px 5px 10px;
+      background: #eff6ff; border: 1.5px solid #bfdbfe;
+      border-radius: 20px; font-size: 13px; color: #1e40af;
+      transition: opacity .15s;
+    }
+    .attachment-tag .tag-name {
+      max-width: 180px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .attachment-tag .tag-rm {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: 50%;
+      border: none; background: #bfdbfe; color: #1e40af;
+      font-size: 12px; cursor: pointer; line-height: 1;
+      transition: background .15s;
+    }
+    .attachment-tag .tag-rm:hover { background: #93c5fd; }
+    .attachment-empty {
+      font-size: 12px; color: #94a3b8; font-style: italic;
+    }
+
+    /* ── 操作按钮行 ── */
+    .btn-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+    .btn-primary {
+      padding: 10px 28px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff; font-size: 14px; font-weight: 500;
+      cursor: pointer; transition: opacity .15s, transform .1s;
+    }
+    .btn-primary:hover { opacity: .92; }
+    .btn-primary:active { transform: scale(.97); }
+    .btn-primary:disabled { background: #cbd5e1; cursor: not-allowed; transform: none; }
+    .status-text { font-size: 13px; color: #64748b; }
+
+    /* ── 输出区 ── */
+    .output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .badge {
+      font-size: 11px; background: #eff6ff; color: #2563eb;
+      padding: 2px 10px; border-radius: 20px; font-weight: 500;
+    }
+    .output {
+      min-height: 200px; max-height: 480px; overflow-y: auto;
+      padding: 16px 18px; background: #0f172a; color: #e2e8f0;
+      border-radius: 10px; font-size: 14px; line-height: 1.75;
+      white-space: pre-wrap; word-break: break-word;
+      font-family: "Menlo", "Consolas", "Courier New", monospace;
+    }
+    .t-assistant { color: #93c5fd; }
+    .t-system    { color: #64748b; font-size: 12px; }
+    .t-error     { color: #f87171; }
+    .t-done      { color: #34d399; font-weight: 600; }
+
+    /* ── 请求预览 ── */
+    .json-preview {
+      background: #0f172a; color: #7dd3fc; border-radius: 10px;
+      padding: 14px 16px; font-size: 12px; font-family: monospace;
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 240px; overflow-y: auto;
+    }
+
+    .divider { border: none; border-top: 1px solid #f1f5f9; margin: 16px 0; }
+
+    @media (max-width: 600px) {
+      .card { padding: 18px 16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ① 上传文件 -->
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#f59e0b"></span>① 上传文件（自动附加到对话）</div>
+
+    <div class="upload-panel" id="uploadPanel" onclick="document.getElementById('uploadInput').click()">
+      <input type="file" id="uploadInput" />
+      <div class="upload-icon">📎</div>
+      <div class="upload-text">点击或拖拽文件至此<br><strong>上传后自动附加到对话</strong></div>
+    </div>
+    <div class="upload-status" id="uploadStatus"></div>
+
+    <!-- 已上传附件标签 -->
+    <div class="attachment-section" id="attachmentSection" style="display:none;">
+      <label style="margin-top:12px;">已附加文件（对话时自动携带，点击 × 移除）</label>
+      <div class="attachment-list" id="attachmentList"></div>
+    </div>
+  </div>
+
+  <!-- ② 发送对话 -->
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#2563eb"></span>② 发送对话</div>
+
+    <label for="content">对话内容 <span style="color:#ef4444">*</span></label>
+    <textarea id="content" placeholder="例如：请帮我分析一下这份财务报告中的现金流状况。"></textarea>
+
+    <div class="hint" id="attachmentHint" style="display:none;margin-top:10px;"></div>
+
+    <hr class="divider" />
+
+    <div class="btn-row">
+      <button class="btn-primary" id="sendBtn" onclick="doChat()">开始流式对话</button>
+      <button class="btn-primary" onclick="clearOutput()" style="background:linear-gradient(135deg,#64748b,#475569)">清空输出</button>
+      <span class="status-text" id="chatStatus">就绪</span>
+    </div>
+  </div>
+
+  <!-- ③ 流式输出 -->
+  <div class="card">
+    <div class="output-header">
+      <div class="card-title" style="margin-bottom:0"><span class="dot" style="background:#34d399"></span>AI 流式输出</div>
+      <span class="badge" id="charCount">0 字</span>
+    </div>
+    <div class="output" id="output"><span class="t-system">等待请求...</span></div>
+  </div>
+
+  <!-- ④ 请求参数预览 -->
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#8b5cf6"></span>本次请求参数</div>
+    <div class="json-preview" id="reqPreview">（发送对话后显示）</div>
+  </div>
+
+</div>
+
+<script>
+  /* ─── 配置 ─── */
+  var UPLOAD_API = '/yyy/coze/upload';
+  var CHAT_API   = '/yyy/coze/chat';
+
+  /* ─── 状态 ─── */
+  // attachments: [{ file_id, file_name, bytes }]
+  var attachments = [];
+
+  /* ─── 工具函数 ─── */
+  function escHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  /* ─── 附件标签渲染 ─── */
+  function renderAttachments() {
+    var list    = document.getElementById('attachmentList');
+    var section = document.getElementById('attachmentSection');
+    var hint    = document.getElementById('attachmentHint');
+
+    list.innerHTML = '';
+    if (attachments.length === 0) {
+      section.style.display = 'none';
+      hint.style.display = 'none';
+      return;
+    }
+
+    section.style.display = '';
+    hint.style.display = '';
+    hint.textContent = '本次对话将携带 ' + attachments.length + ' 个文件（file_id 自动填充，无需手动输入）';
+
+    attachments.forEach(function(att, idx) {
+      var tag = document.createElement('span');
+      tag.className = 'attachment-tag';
+      tag.innerHTML =
+        '<span class="tag-name" title="' + escHtml(att.file_id) + '">📄 ' + escHtml(att.file_name || '未命名') + '</span>' +
+        '<button class="tag-rm" onclick="removeAttachment(' + idx + ')">×</button>';
+      list.appendChild(tag);
+    });
+  }
+
+  function removeAttachment(idx) {
+    attachments.splice(idx, 1);
+    renderAttachments();
+  }
+
+  /* ─── 上传文件 ─── */
+  function doUpload(file) {
+    var statusEl = document.getElementById('uploadStatus');
+    statusEl.textContent = '上传中...';
+    statusEl.className = 'upload-status';
+
+    var fd = new FormData();
+    fd.append('file', file, file.name);
+
+    fetch(UPLOAD_API, { method: 'POST', body: fd })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data.error) throw new Error(data.error);
+        // 自动加入附件列表 —— 无需用户任何操作
+        attachments.push({
+          file_id:   data.file_id   || '',
+          file_name: data.file_name || file.name,
+          bytes:      data.bytes     || 0,
+        });
+        renderAttachments();
+        statusEl.innerHTML = '✅ 上传成功：' + escHtml(data.file_name || file.name) + '（已自动附加到对话）';
+        statusEl.className = 'upload-status ok';
+      })
+      .catch(function(err) {
+        statusEl.textContent = '❌ 上传失败：' + err.message;
+        statusEl.className = 'upload-status err';
+      });
+  }
+
+  /* ─── 拖拽 & 点击上传 ─── */
+  (function() {
+    var panel = document.getElementById('uploadPanel');
+    panel.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      panel.style.borderColor = '#2563eb';
+      panel.style.background = '#eff6ff';
+    });
+    panel.addEventListener('dragleave', function() {
+      panel.style.borderColor = '';
+      panel.style.background = '';
+    });
+    panel.addEventListener('drop', function(e) {
+      e.preventDefault();
+      panel.style.borderColor = '';
+      panel.style.background = '';
+      if (e.dataTransfer.files.length > 0) {
+        // 支持多文件：逐个上传
+        for (var i = 0; i < e.dataTransfer.files.length; i++) {
+          doUpload(e.dataTransfer.files[i]);
+        }
+      }
+    });
+  })();
+
+  document.getElementById('uploadInput').addEventListener('change', function() {
+    if (this.files.length > 0) {
+      for (var i = 0; i < this.files.length; i++) {
+        doUpload(this.files[i]);
+      }
+      this.value = ''; // 允许重复选同一文件
+    }
+  });
+
+  /* ─── 请求预览 ─── */
+  function updateReqPreview() {
+    var fids = attachments.map(function(a) { return a.file_id; });
+    var preview = {
+      content:   document.getElementById('content').value || '（空）',
+      file_ids:  fids.length > 0 ? fids.join(',') : '（无附件）',
+      attachments: attachments.map(function(a) { return { file_name: a.file_name, file_id: a.file_id }; })
+    };
+    document.getElementById('reqPreview').textContent = JSON.stringify(preview, null, 2);
+  }
+
+  document.getElementById('content').addEventListener('input', updateReqPreview);
+
+  /* ─── 流式对话 ─── */
+  var fullText     = '';
+  var renderTimer   = null;
+  var currentReader = null;
+
+  function clearOutput() {
+    fullText = '';
+    document.getElementById('output').innerHTML = '<span class="t-system">已清空。</span>';
+    document.getElementById('charCount').textContent = '0 字';
+    document.getElementById('chatStatus').textContent = '就绪';
+    if (currentReader) { try { currentReader.cancel(); } catch(e) {} }
+  }
+
+  function renderText() {
+    if (renderTimer) return;
+    renderTimer = setTimeout(function() {
+      renderTimer = null;
+      var display = fullText.length > 60000
+        ? fullText.slice(-60000) + '\n\n...（内容过长已截断）'
+        : fullText;
+      var out = document.getElementById('output');
+      out.innerHTML = '';
+      var span = document.createElement('span');
+      span.className = 't-assistant';
+      span.textContent = display;
+      out.appendChild(span);
+      out.scrollTop = out.scrollHeight;
+    }, 40);
+  }
+
+  async function doChat() {
+    var content = document.getElementById('content').value.trim();
+    if (!content) { alert('请输入对话内容！'); return; }
+
+    var sendBtn   = document.getElementById('sendBtn');
+    var chatStatus = document.getElementById('chatStatus');
+    var out       = document.getElementById('output');
+
+    // 构造 file_ids
+    var fids = attachments.map(function(a) { return a.file_id; });
+
+    // 更新预览
+    updateReqPreview();
+
+    // 重置输出
+    fullText = '';
+    out.innerHTML = '<span class="t-system">▋ 连接中...</span>';
+    document.getElementById('charCount').textContent = '0 字';
+    sendBtn.disabled = true;
+    chatStatus.textContent = '流式响应中...';
+
+    // 构造 FormData
+    var fd = new FormData();
+    fd.append('content', content);
+    if (fids.length > 0) {
+      fd.append('file_ids', fids.join(','));
+    }
+
+    var response;
+    try {
+      response = await fetch(CHAT_API, { method: 'POST', body: fd });
+    } catch (err) {
+      out.innerHTML = '<span class="t-error">网络异常：' + escHtml(err.message) + '</span>';
+      chatStatus.textContent = '失败';
+      sendBtn.disabled = false;
+      return;
+    }
+
+    if (!response.ok) {
+      var txt = await response.text();
+      out.innerHTML = '<span class="t-error">HTTP ' + response.status + '：' + escHtml(txt.slice(0, 600)) + '</span>';
+      chatStatus.textContent = '失败';
+      sendBtn.disabled = false;
+      return;
+    }
+
+    /* ── SSE 读取 ── */
+    var reader = response.body.getReader();
+    currentReader = reader;
+    var decoder = new TextDecoder('utf-8');
+    var buffer  = '';
+
+    try {
+      while (true) {
+        var _r = await reader.read();
+        if (_r.done) break;
+        buffer += decoder.decode(_r.value, { stream: true });
+
+        var lines = buffer.split(/\r?\n/);
+        buffer = lines.pop();
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line || line.indexOf('data:') !== 0) continue;
+
+          var payload = line.slice(5).trim();
+          var evt;
+          try { evt = JSON.parse(payload); } catch (e) { continue; }
+
+          if (evt.type === 'chunk') {
+            fullText += (evt.text || '');
+            renderText();
+            document.getElementById('charCount').textContent = fullText.length + ' 字';
+
+          } else if (evt.type === 'done') {
+            var doneEl = document.createElement('span');
+            doneEl.className = 't-done';
+            doneEl.textContent = '\n\n✅ 完成（消耗 token：' + (evt.token_count || 0) + '）';
+            out.appendChild(doneEl);
+            out.scrollTop = out.scrollHeight;
+            chatStatus.textContent = '完成';
+
+          } else if (evt.type === 'error') {
+            var errEl = document.createElement('span');
+            errEl.className = 't-error';
+            errEl.textContent = '\n\n❌ 错误：' + (evt.message || '');
+            out.appendChild(errEl);
+            chatStatus.textContent = '错误';
+          }
+        }
+      }
+    } catch (err) {
+      out.innerHTML += '\n<span class="t-error">读取流异常：' + escHtml(err.message) + '</span>';
+      chatStatus.textContent = '异常';
+    } finally {
+      sendBtn.disabled = false;
+      currentReader = null;
+    }
+  }
+</script>
+</body>
+</html>

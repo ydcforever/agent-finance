@@ -10,4 +10,5 @@ from .loan import router as loan_router
 from .private_txs import router as private_txs_router
 from .cash_flow import router as cash_flow_router
 from .tax_expense import router as tax_expense_router
-from .ai_chat import router as ai_chat_router
+from .ai_chat_workbuddy import router as ai_chat_workbuddy_router
+from .ai_chat_coze import router as ai_chat_coze_router

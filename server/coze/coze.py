@@ -1,4 +1,4 @@
-from cozepy import ChatEventType, Coze, TokenAuth, Message, COZE_CN_BASE_URL
+from cozepy import ChatEventType, Coze, TokenAuth, Message, COZE_CN_BASE_URL, MessageObjectString
 
 
 import requests
@@ -57,6 +57,7 @@ for event in coze.chat.stream(
     user_id="3137323286157770",
     additional_messages=[
         Message.build_user_question_text(content="分析一下上海氢枫能源科技有限公司的财务状况"),
+        MessageObjectString.build_file(file_id= ""),
     ]
 ):
     if event.event == ChatEventType.CONVERSATION_MESSAGE_DELTA:

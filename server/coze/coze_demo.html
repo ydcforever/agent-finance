@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Coze AI 对话 + 现金流雷达</title>
+  <title>财务智控台 - 经营总览</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -303,14 +303,20 @@
     @media (max-width: 1024px) {
       .sidebar { width: 180px; min-width: 180px; }
       .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .overview-kpi-row { grid-template-columns: repeat(4, 1fr); }
+      .water-action-row { grid-template-columns: 1fr; }
     }
     @media (max-width: 768px) {
       .sidebar { display: none; }
       .kpi-row { grid-template-columns: repeat(2, 1fr); }
       .forecast-row { grid-template-columns: 1fr; }
+      .overview-kpi-row { grid-template-columns: repeat(3, 1fr); }
+      .water-action-row { grid-template-columns: 1fr; }
     }
     @media (max-width: 480px) {
       .kpi-row { grid-template-columns: 1fr; }
+      .overview-kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .water-action-row { grid-template-columns: 1fr; }
     }
 
     /* ══════════════════ 经营分析报告样式 ══════════════════ */
@@ -508,6 +514,310 @@
       .report-insights { grid-template-columns: 1fr; }
       .report-kpi-grid { grid-template-columns: repeat(2, 1fr); }
     }
+
+    /* ══════════════════ 经营总览新增样式 ══════════════════ */
+
+    /* 经营总览核心卡片 */
+    .overview-card {
+      background: linear-gradient(135deg, #f8fafc, #fff);
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px 10px;
+      text-align: center;
+    }
+    .overview-card.danger { border-color: #fecaca; background: linear-gradient(135deg, #fef2f2, #fff); }
+    .overview-card.safe   { border-color: #bbf7d0; background: linear-gradient(135deg, #f0fdf4, #fff); }
+    .overview-card-header { font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 500; }
+    .overview-card-value { font-size: 18px; font-weight: 700; color: #0f172a; }
+    .overview-card.danger .overview-card-value { color: #dc2626; }
+    .overview-card.safe .overview-card-value { color: #16a34a; }
+    .overview-card-sub { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+
+    .overview-kpi-row {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    /* ── 三列一行进度条布局 ── */
+    .triple-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .triple-col {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    .triple-col-title {
+      font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .triple-bar-list {
+      display: flex; flex-direction: column; gap: 8px; flex: 1;
+    }
+    .progress-bar-item {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .pb-label {
+      width: 85px; min-width: 85px;
+      font-size: 11px; font-weight: 500; color: #475569;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .pb-track {
+      flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;
+    }
+    .pb-fill {
+      height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, #16a34a, #d97706, #dc2626);
+      transition: width .4s ease;
+    }
+    .pb-fill.complete {
+      background: linear-gradient(90deg, #dc2626, #d97706, #16a34a);
+    }
+    .pb-fill.danger  { background: #dc2626; }
+    .pb-fill.warning { background: #d97706; }
+    .pb-fill.safe    { background: #16a34a; }
+    .pb-val {
+      width: 60px; min-width: 60px; text-align: right;
+      font-size: 12px; font-weight: 700; color: #0f172a;
+    }
+    .pb-val.danger  { color: #dc2626; }
+    .pb-val.warning { color: #d97706; }
+    .pb-val.safe    { color: #16a34a; }
+
+    /* 风险仪表盘 - 进度条 (保留旧样式兼容) */
+    .risk-gauge-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .risk-gauge-item {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      text-align: center;
+    }
+    .gauge-label {
+      font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 8px;
+    }
+    .gauge-bar-bg {
+      height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .gauge-bar-fill {
+      height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, #16a34a, #d97706, #dc2626);
+      transition: width .4s ease;
+    }
+    .gauge-bar-fill.complete {
+      background: linear-gradient(90deg, #dc2626, #d97706, #16a34a);
+    }
+    .gauge-pct {
+      font-size: 18px; font-weight: 700; color: #0f172a;
+    }
+
+    /* 风险详情项 */
+    .risk-detail-item {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .risk-detail-item.danger { border-color: #fecaca; background: #fff5f5; }
+    .risk-detail-item.warning { border-color: #fde68a; background: #fffbeb; }
+    .risk-detail-label { font-size: 13px; color: #475569; font-weight: 500; }
+    .risk-detail-value {
+      font-size: 16px; font-weight: 700; color: #0f172a;
+    }
+    .risk-detail-item.danger .risk-detail-value { color: #dc2626; }
+    .risk-detail-item.warning .risk-detail-value { color: #d97706; }
+
+    /* 行动建议卡片 */
+    .action-items-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .action-item {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: linear-gradient(135deg, #eff6ff, #fff);
+      border: 1.5px solid #bfdbfe;
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .action-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #2563eb; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; flex-shrink: 0;
+    }
+    .action-body { flex: 1; min-width: 0; }
+    .action-title { font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 3px; }
+    .action-detail { font-size: 11px; color: #64748b; line-height: 1.5; }
+    .action-amount { font-size: 15px; font-weight: 700; color: #2563eb; margin-top: 4px; }
+
+    /* 右侧卡片式 action（竖排） */
+    .action-card {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 14px 16px;
+      transition: box-shadow .15s, border-color .15s;
+    }
+    .action-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.06); border-color: #bfdbfe; }
+    .action-card-num {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 700; flex-shrink: 0;
+    }
+    .action-card-body { flex: 1; min-width: 0; }
+    .action-card-title { font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 4px; }
+    .action-card-detail { font-size: 12px; color: #64748b; line-height: 1.5; }
+    .action-card-amount { font-size: 16px; font-weight: 700; color: #2563eb; margin-top: 4px; }
+
+    /* 未来资金水位 + 3件事 两栏布局 */
+    .water-action-row {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 16px;
+    }
+
+    @media (max-width: 1024px) {
+      .triple-row { grid-template-columns: 1fr; }
+      .action-items-row { grid-template-columns: 1fr; }
+      .rp-two-col { grid-template-columns: 1fr; }
+      .rp-three-col { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      .triple-row { grid-template-columns: 1fr; }
+      .rp-two-col { grid-template-columns: 1fr; }
+      .rp-three-col { grid-template-columns: 1fr; }
+    }
+
+    /* ══════════════════ 收付款面板样式 ══════════════════ */
+    .rp-two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .rp-three-col {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .rp-card { margin: 0; }
+
+    /* 客户回款进度条 */
+    .rp-progress-list { display: flex; flex-direction: column; gap: 10px; }
+    .rp-progress-item {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .rp-progress-name {
+      width: 100px; font-size: 12px; color: #475569; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      flex-shrink: 0;
+    }
+    .rp-progress-bar-wrap {
+      flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;
+    }
+    .rp-progress-bar-fill {
+      height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, #dc2626, #d97706, #16a34a);
+      transition: width .4s ease;
+    }
+    .rp-progress-pct {
+      width: 48px; font-size: 12px; font-weight: 600; color: #0f172a; text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* 供应商付款列表 */
+    .rp-supplier-list { display: flex; flex-direction: column; gap: 8px; }
+    .rp-supplier-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 10px; background: #f8fafc; border-radius: 8px;
+      border: 1px solid #f1f5f9;
+    }
+    .rp-supplier-name { font-size: 13px; color: #1e293b; font-weight: 500; }
+    .rp-supplier-detail { font-size: 11px; color: #94a3b8; }
+    .rp-supplier-amount { font-size: 14px; font-weight: 700; color: #dc2626; }
+
+    /* 优先催收列表 */
+    .rp-collection-list { display: flex; flex-direction: column; gap: 8px; }
+    .rp-collection-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; background: #fff5f5; border-radius: 8px;
+      border: 1px solid #fecaca;
+    }
+    .rp-collection-rank {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #dc2626; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+    .rp-collection-info { flex: 1; min-width: 0; }
+    .rp-collection-name { font-size: 13px; color: #1e293b; font-weight: 600; }
+    .rp-collection-meta { font-size: 11px; color: #94a3b8; }
+    .rp-collection-amount { font-size: 14px; font-weight: 700; color: #dc2626; flex-shrink: 0; }
+
+    /* 近期必须付款 */
+    .rp-mandatory-list { display: flex; flex-direction: column; gap: 10px; }
+    .rp-mandatory-item {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 10px 12px; background: #f8fafc; border-radius: 8px;
+      border: 1px solid #f1f5f9;
+    }
+    .rp-mandatory-label { font-size: 13px; font-weight: 600; color: #1e293b; }
+    .rp-mandatory-detail { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+    .rp-mandatory-amount { font-size: 15px; font-weight: 700; color: #d97706; }
+    .rp-mandatory-total {
+      padding: 8px 12px; background: #fffbeb; border: 1px solid #fde68a;
+      border-radius: 8px; text-align: right;
+    }
+    .rp-mandatory-total-label { font-size: 11px; color: #92400e; }
+    .rp-mandatory-total-value { font-size: 18px; font-weight: 700; color: #d97706; }
+
+    /* 短期净缺口 */
+    .rp-gap-row {
+      display: flex; justify-content: space-between;
+      padding: 8px 0; font-size: 13px; color: #475569;
+    }
+    .rp-gap-row .rp-gap-label { color: #64748b; }
+    .rp-gap-row .rp-gap-val { font-weight: 600; color: #0f172a; }
+    .rp-gap-divider {
+      border: none; border-top: 1px dashed #e2e8f0; margin: 8px 0;
+    }
+    .rp-gap-result {
+      text-align: center; padding: 12px 8px;
+      border-radius: 10px; margin-top: 8px;
+    }
+    .rp-gap-result.danger { background: #fef2f2; border: 1px solid #fecaca; }
+    .rp-gap-result.warning { background: #fffbeb; border: 1px solid #fde68a; }
+    .rp-gap-result.safe { background: #f0fdf4; border: 1px solid #bbf7d0; }
+    .rp-gap-result-label { font-size: 11px; margin-bottom: 4px; }
+    .rp-gap-result-value {
+      font-size: 22px; font-weight: 700;
+    }
+    .rp-gap-result.danger .rp-gap-result-label,
+    .rp-gap-result.danger .rp-gap-result-value { color: #dc2626; }
+    .rp-gap-result.warning .rp-gap-result-label,
+    .rp-gap-result.warning .rp-gap-result-value { color: #d97706; }
+    .rp-gap-result.safe .rp-gap-result-label,
+    .rp-gap-result.safe .rp-gap-result-value { color: #16a34a; }
+    .rp-gap-result-sub { font-size: 11px; color: #94a3b8; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -521,8 +831,11 @@
         <span class="nav-icon">💬</span>AI 对话
       </button>
       <button class="sidebar-nav-item" onclick="switchPage('dashboard')">
-        <span class="nav-icon">📡</span>现金流雷达
+        <span class="nav-icon">📡</span>经营总览
         <span class="sidebar-badge">实时</span>
+      </button>
+      <button class="sidebar-nav-item" onclick="switchPage('receivable')">
+        <span class="nav-icon">💳</span>收付款面板
       </button>
       <button class="sidebar-nav-item" onclick="switchPage('report')">
         <span class="nav-icon">📊</span>经营分析报告
@@ -578,44 +891,136 @@
       </div>
     </div>
 
-    <!-- 页面2：现金流雷达 -->
+    <!-- 页面2：经营总览 -->
     <div class="page-panel" id="page-dashboard">
       <div class="card">
         <div class="dashboard-header">
-          <div class="card-title" style="margin-bottom:0"><span class="dot" style="background:#2563eb"></span>现金流雷达</div>
+          <div class="card-title" style="margin-bottom:0"><span class="dot" style="background:#2563eb"></span>经营总览</div>
           <div class="dashboard-refresh">
             数据刷新时间：<span id="refreshTime">加载中...</span>
             <a onclick="loadDashboard()">刷新</a>
           </div>
         </div>
 
-        <div class="kpi-row" id="kpiRow">
-          <div class="kpi-card"><div class="kpi-label">账面余额</div><div class="kpi-value">---</div></div>
-          <div class="kpi-card"><div class="kpi-label">未来30天回款</div><div class="kpi-value">---</div></div>
-          <div class="kpi-card"><div class="kpi-label">未来30天支出</div><div class="kpi-value">---</div></div>
-          <div class="kpi-card"><div class="kpi-label">资金缺口/安全垫</div><div class="kpi-value">---</div></div>
+        <!-- 概括分析 -->
+        <div id="ovSummaryAnalysis" style="margin-bottom:14px;padding:14px 16px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc;font-size:13px;color:#475569;line-height:1.6;display:none;">
         </div>
 
-        <div class="forecast-row" id="forecastRow">
-          <div class="forecast-card"><div class="forecast-title">7天视角</div><div class="forecast-desc">加载中...</div></div>
-          <div class="forecast-card"><div class="forecast-title">15天视角</div><div class="forecast-desc">加载中...</div></div>
-          <div class="forecast-card"><div class="forecast-title">30天视角</div><div class="forecast-desc">加载中...</div></div>
-        </div>
-
-        <div class="trend-chart">
-          <div class="trend-chart-title">未来30天现金流推演</div>
-          <div class="trend-canvas-wrap"><canvas id="trendCanvas"></canvas></div>
-          <div class="trend-legend">
-            <span><span class="dot" style="background:#16a34a"></span>收入</span>
-            <span><span class="dot" style="background:#dc2626"></span>支出</span>
-            <span><span class="dot" style="background:#2563eb"></span>余额</span>
+        <!-- ── 经营总览核心指标（一排） ── -->
+        <div class="overview-kpi-row" id="overviewKpiRow">
+          <div class="overview-card">
+            <div class="overview-card-header">💰 当前银行余额</div>
+            <div class="overview-card-value" id="ovBalance">---</div>
+          </div>
+          <div class="overview-card">
+            <div class="overview-card-header">📅 可用现金</div>
+            <div class="overview-card-value" id="ovAvailCash">---</div>
+            <div class="overview-card-sub" id="ovAvailDate">---</div>
+          </div>
+          <div class="overview-card danger">
+            <div class="overview-card-header">📉 最低资金水位</div>
+            <div class="overview-card-value" id="ovMinWater">---</div>
+            <div class="overview-card-sub" id="ovMinDate">---</div>
+          </div>
+          <div class="overview-card danger">
+            <div class="overview-card-header">⚠ 安全线缺口</div>
+            <div class="overview-card-value" id="ovSafetyGap">---</div>
+            <div class="overview-card-sub">按 5 万安全线</div>
+          </div>
+          <div class="overview-card">
+            <div class="overview-card-header">📬 应收未收</div>
+            <div class="overview-card-value" id="ovReceivable">---</div>
+            <div class="overview-card-sub">客户欠款</div>
+          </div>
+          <div class="overview-card">
+            <div class="overview-card-header">📤 近期待付</div>
+            <div class="overview-card-value" id="ovPayable7d">---</div>
+            <div class="overview-card-sub">15 天内</div>
+          </div>
+          <div class="overview-card">
+            <div class="overview-card-header">📊 本月回款率</div>
+            <div class="overview-card-value" id="ovCollectRate">---</div>
+            <div class="overview-card-sub">---</div>
           </div>
         </div>
 
-        <div style="margin-bottom:20px;">
-          <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:12px;">⚠ 风险预警</div>
-          <div class="alert-list" id="alertList">
-            <div class="alert-item warning" style="justify-content:center;font-size:12px;color:#64748b;">加载中...</div>
+
+
+        <!-- ── 未来资金水位 + 今天先做 3 件事 两栏布局 ── -->
+        <div class="water-action-row" style="margin-bottom:18px;">
+          <!-- 左侧：未来资金水位图表 -->
+          <div class="trend-chart" style="margin-bottom:0;">
+            <div class="trend-chart-title">📈 未来资金水位</div>
+            <div class="trend-canvas-wrap"><canvas id="trendCanvas"></canvas></div>
+            <div class="trend-legend">
+              <span><span class="dot" style="background:#16a34a"></span>收入</span>
+              <span><span class="dot" style="background:#dc2626"></span>支出</span>
+              <span><span class="dot" style="background:#2563eb"></span>余额</span>
+            </div>
+          </div>
+          <!-- 右侧：今天先做 3 件事（卡片布局） -->
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:10px;">📋 今天先做 3 件事</div>
+            <div style="display:flex;flex-direction:column;gap:10px;" id="actionItemsRow">
+              <div class="action-card">
+                <div class="action-card-num">1</div>
+                <div class="action-card-body">
+                  <div class="action-card-title">---</div>
+                  <div class="action-card-detail">加载中...</div>
+                </div>
+              </div>
+              <div class="action-card">
+                <div class="action-card-num">2</div>
+                <div class="action-card-body">
+                  <div class="action-card-title">---</div>
+                  <div class="action-card-detail">加载中...</div>
+                </div>
+              </div>
+              <div class="action-card">
+                <div class="action-card-num">3</div>
+                <div class="action-card-body">
+                  <div class="action-card-title">---</div>
+                  <div class="action-card-detail">加载中...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── 三合一：风险仪表盘 | 应收应付净敞口 | 关键风险（一行三列进度条布局） ── -->
+        <div style="margin-bottom:18px;">
+          <div class="triple-row">
+            <!-- 列1：风险仪表盘 -->
+            <div class="triple-col">
+              <div class="triple-col-title">🎯 风险仪表盘</div>
+              <div class="triple-bar-list" id="riskDashboardBars">
+                <div class="progress-bar-item"><div class="pb-label">应付压力</div><div class="pb-track"><div class="pb-fill" style="width:0%"></div></div><div class="pb-val">---</div></div>
+                <div class="progress-bar-item"><div class="pb-label">AR账龄</div><div class="pb-track"><div class="pb-fill" style="width:0%"></div></div><div class="pb-val">---</div></div>
+                <div class="progress-bar-item"><div class="pb-label">合同完整</div><div class="pb-track"><div class="pb-fill complete" style="width:0%"></div></div><div class="pb-val">---</div></div>
+                <div class="progress-bar-item"><div class="pb-label">现金总额</div><div class="pb-track"><div class="pb-fill complete" style="width:0%"></div></div><div class="pb-val">---</div></div>
+                <div class="progress-bar-item" id="riskNoContractBar"><div class="pb-label">📄 无合同客户</div><div class="pb-track"><div class="pb-fill" style="width:0%"></div></div><div class="pb-val">---</div></div>
+                <div class="progress-bar-item" id="riskRefundBar"><div class="pb-label">🔙 品质退款</div><div class="pb-track"><div class="pb-fill" style="width:0%"></div></div><div class="pb-val">---</div></div>
+              </div>
+            </div>
+
+            <!-- 列2：应收应付净敞口 -->
+            <div class="triple-col">
+              <div class="triple-col-title">📊 应收应付净敞口</div>
+              <div class="triple-bar-list" id="netExposureBars">
+                <div class="progress-bar-item"><div class="pb-label">📬 应收总额</div><div class="pb-track"><div class="pb-fill" style="width:0%"></div></div><div class="pb-val" id="neTotalAR">---</div></div>
+                <div class="progress-bar-item"><div class="pb-label">📤 应付总额</div><div class="pb-track"><div class="pb-fill" style="width:0%"></div></div><div class="pb-val" id="neTotalAP">---</div></div>
+                <div class="progress-bar-item" id="neNetExposureBar"><div class="pb-label">📐 净敞口</div><div class="pb-track"><div class="pb-fill" style="width:0%"></div></div><div class="pb-val" id="neNetExposure">---</div></div>
+                <div class="progress-bar-item" id="neCoverDaysBar"><div class="pb-label">📅 覆盖天数</div><div class="pb-track"><div class="pb-fill" style="width:0%"></div></div><div class="pb-val" id="neCoverDays">---</div></div>
+              </div>
+            </div>
+
+            <!-- 列3：关键风险 -->
+            <div class="triple-col">
+              <div class="triple-col-title">⚠️ 关键风险</div>
+              <div class="triple-bar-list" id="keyRiskBars">
+                <div class="progress-bar-item"><div class="pb-label">暂无风险数据</div><div class="pb-track"><div class="pb-fill" style="width:0%"></div></div><div class="pb-val">---</div></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -625,7 +1030,67 @@
       </div>
     </div>
 
-    <!-- 页面3：经营分析报告 -->
+    <!-- 页面3：收付款面板 -->
+    <div class="page-panel" id="page-receivable">
+      <div class="card">
+        <div class="dashboard-header">
+          <div class="card-title" style="margin-bottom:0"><span class="dot" style="background:#2563eb"></span>收付款面板</div>
+          <div class="dashboard-refresh">
+            数据刷新时间：<span id="rpRefreshTime">加载中...</span>
+            <a onclick="loadReceivablePanel()">刷新</a>
+          </div>
+        </div>
+
+        <!-- 概括分析 -->
+        <div id="rpSummaryAnalysis" style="margin-bottom:14px;padding:14px 16px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc;font-size:13px;color:#475569;line-height:1.6;display:none;">
+        </div>
+
+        <!-- 左侧：客户回款进度 + 右侧：供应商付款 -->
+        <div class="rp-two-col" style="margin-bottom:14px;">
+          <!-- 客户应收与回款 -->
+          <div class="card rp-card">
+            <div class="card-title"><span class="dot" style="background:#2563eb"></span>客户应收与回款</div>
+            <div class="rp-progress-list" id="rpCustomerProgress">
+              <div style="font-size:12px;color:#94a3b8;text-align:center;padding:20px;">加载中...</div>
+            </div>
+          </div>
+          <!-- 供应商付款压力 -->
+          <div class="card rp-card">
+            <div class="card-title"><span class="dot" style="background:#d97706"></span>供应商付款压力</div>
+            <div class="rp-supplier-list" id="rpSupplierPayments">
+              <div style="font-size:12px;color:#94a3b8;text-align:center;padding:20px;">加载中...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 三列：优先催收 | 近期必须付款 | 短期净缺口 -->
+        <div class="rp-three-col">
+          <!-- 优先催收 -->
+          <div class="card rp-card">
+            <div class="card-title"><span class="dot" style="background:#dc2626"></span>⚡ 优先催收</div>
+            <div class="rp-collection-list" id="rpPriorityCollection">
+              <div style="font-size:12px;color:#94a3b8;text-align:center;padding:20px;">加载中...</div>
+            </div>
+          </div>
+          <!-- 近期必须付款 -->
+          <div class="card rp-card">
+            <div class="card-title"><span class="dot" style="background:#d97706"></span>📅 近期必须付款</div>
+            <div class="rp-mandatory-list" id="rpMandatoryPayments">
+              <div style="font-size:12px;color:#94a3b8;text-align:center;padding:20px;">加载中...</div>
+            </div>
+          </div>
+          <!-- 短期净缺口 -->
+          <div class="card rp-card" id="rpShortGapCard">
+            <div class="card-title"><span class="dot" style="background:#8b5cf6"></span>⚠ 短期净缺口</div>
+            <div id="rpShortGapContent" style="text-align:center;padding:16px;">
+              <div style="font-size:12px;color:#94a3b8;">加载中...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 页面4：经营分析报告 -->
     <div class="page-panel" id="page-report">
       <div class="card">
         <div class="dashboard-header">
@@ -667,6 +1132,7 @@
   /* ─── 配置 ─── */
   var CHAT_API = '/yyy/coze/chat';
   var DASHBOARD_API = '/yyy/dashboard/view';
+  var RECEIVABLE_API = '/yyy/dashboard/receivable_payment';
 
   /* ─── 页面切换 ─── */
   function switchPage(pageId) {
@@ -675,7 +1141,7 @@
     document.getElementById('page-' + pageId).classList.add('active');
 
     var navs = document.querySelectorAll('.sidebar-nav-item');
-    var pageMap = { chat: 0, dashboard: 1, report: 2 };
+    var pageMap = { chat: 0, dashboard: 1, receivable: 2, report: 3 };
     if (pageMap[pageId] !== undefined) {
       navs[pageMap[pageId]].classList.add('active');
     }
@@ -689,6 +1155,10 @@
     // 切到报告时加载
     if (pageId === 'report') {
       loadReport();
+    }
+    // 切到收付款面板时加载
+    if (pageId === 'receivable') {
+      loadReceivablePanel();
     }
   }
 
@@ -944,7 +1414,7 @@
     }
   }
 
-  /* ══════════════════ 现金流雷达渲染 ══════════════════ */
+  /* ══════════════════ 经营总览渲染 ══════════════════ */
 
   async function loadDashboard() {
     try {
@@ -960,82 +1430,219 @@
   }
 
   function renderDashboard(d) {
-    var kpi = d.kpi_cards;
-    var fc  = d.cashflow_forecast;
+    var fc = d.cashflow_forecast;
 
     document.getElementById('refreshTime').textContent = d.summary.data_refresh_time || '---';
 
-    // KPI 卡片
-    var kpiRow = document.getElementById('kpiRow');
-    var cards = [
-      { label: '当前账面余额', value: kpi.current_balance.value, level: 'safe' },
-      { label: '未来30天预计回款', value: kpi.expected_income_30d.value, level: 'safe',
-        breakdown: kpi.expected_income_30d.breakdown },
-      { label: '未来30天预计支出', value: kpi.expected_expense_30d.value, level: 'safe',
-        breakdown: kpi.expected_expense_30d.breakdown },
-      { label: kpi.funding_gap.label, value: kpi.funding_gap.value, level: kpi.funding_gap.level },
-    ];
-
-    kpiRow.innerHTML = cards.map(function(c) {
-      var levelClass = c.level || '';
-      var html = '<div class="kpi-card ' + levelClass + '">';
-      html += '<div class="kpi-label">' + escHtml(c.label) + '</div>';
-      html += '<div class="kpi-value ' + levelClass + '">' + fmtMoney(c.value) + '</div>';
-      if (c.breakdown) {
-        html += '<div class="breakdown-list">';
-        var items = c.breakdown.by_customer || c.breakdown.by_category || {};
-        var keys = Object.keys(items);
-        if (keys.length > 0) {
-          var topKeys = keys.slice(0, 4);
-          for (var i = 0; i < topKeys.length; i++) {
-            html += '<div class="breakdown-item"><span>' + escHtml(topKeys[i]) + '</span><span>' + fmtMoney(items[topKeys[i]]) + '</span></div>';
-          }
-          if (keys.length > 4) {
-            html += '<div class="breakdown-item" style="color:#94a3b8">...共' + keys.length + '项</div>';
-          }
-        }
-        html += '</div>';
+    // ═══════════════ 概括分析 ═══════════════
+    var ov = d.overview;
+    var saDiv2 = document.getElementById('ovSummaryAnalysis');
+    if (ov && ov.summary_analysis) {
+      var sa2 = ov.summary_analysis;
+      var saBg2 = sa2.level === 'danger' ? '#fef2f2' : (sa2.level === 'warning' ? '#fffbeb' : '#f0fdf4');
+      var saBorder2 = sa2.level === 'danger' ? '#fecaca' : (sa2.level === 'warning' ? '#fde68a' : '#bbf7d0');
+      saDiv2.style.display = 'block';
+      saDiv2.style.background = saBg2;
+      saDiv2.style.borderColor = saBorder2;
+      var saHtml2 = '<strong>' + escHtml(sa2.title) + '</strong>';
+      if (sa2.lines && sa2.lines.length > 0) {
+        saHtml2 += '<br>' + sa2.lines.map(function(l) { return escHtml(l); }).join('<br>');
       }
-      html += '</div>';
-      return html;
-    }).join('');
+      saDiv2.innerHTML = saHtml2;
+    } else {
+      saDiv2.style.display = 'none';
+    }
 
-    // 现金流推演
-    var forecastRow = document.getElementById('forecastRow');
-    forecastRow.innerHTML = fc.perspectives.map(function(p) {
-      return [
-        '<div class="forecast-card">',
-          '<div class="forecast-title">' + escHtml(p.title) + '</div>',
-          '<div class="forecast-desc">' + escHtml(p.description) + '</div>',
-          '<div class="forecast-net ' + p.health + '">' + (p.net_change >= 0 ? '+' : '') + fmtMoney(p.net_change) + '</div>',
-          '<div class="forecast-detail">期初 ' + fmtMoney(p.start_balance) + ' → 期末 ' + fmtMoney(p.end_balance) + '</div>',
-          '<div class="forecast-end-balance ' + p.health + '" style="font-size:12px;font-weight:500;color:' + (p.health==='danger'?'#dc2626':p.health==='warning'?'#d97706':'#16a34a') + '">预计期末余额 ' + fmtMoney(p.end_balance) + '</div>',
-        '</div>'
-      ].join('');
-    }).join('');
+    // ═══════════════ 经营总览核心指标（一排7列） ═══════════════
+    if (d.overview) {
+      var ov = d.overview;
 
-    // 趋势图
-    drawTrendChart(fc.daily_series);
+      // 1. 当前银行余额
+      document.getElementById('ovBalance').textContent = fmtMoney(ov.current_balance);
 
-    // 预警
-    var alertList = document.getElementById('alertList');
-    if (d.alerts && d.alerts.length > 0) {
-      alertList.innerHTML = d.alerts.map(function(a) {
-        var icon = a.level === 'danger' ? '🔴' : '🟡';
+      // 2. 可用现金（取日序列中最早可见的余额）
+      var availCash = ov.available_cash != null ? ov.available_cash : ov.current_balance;
+      document.getElementById('ovAvailCash').textContent = fmtMoney(availCash);
+      document.getElementById('ovAvailDate').textContent = ov.available_cash_date || '';
+
+      // 3. 最低资金水位
+      document.getElementById('ovMinWater').textContent = fmtMoney(ov.min_water_level);
+      document.getElementById('ovMinDate').textContent = ov.min_water_date ? ov.min_water_date.slice(5) + ' 触底' : '';
+
+      // 4. 安全线缺口
+      var safetyGapEl = document.getElementById('ovSafetyGap');
+      safetyGapEl.textContent = fmtMoney(ov.safety_gap);
+      if (ov.safety_gap < 0) {
+        safetyGapEl.style.color = '#dc2626';
+        safetyGapEl.parentElement.className = 'overview-card danger';
+      } else {
+        safetyGapEl.style.color = '#16a34a';
+        safetyGapEl.parentElement.className = 'overview-card safe';
+      }
+
+      // 5. 应收未收
+      document.getElementById('ovReceivable').textContent = fmtMoney(ov.total_receivable);
+
+      // 6. 近期待付
+      document.getElementById('ovPayable7d').textContent = fmtMoney(ov.total_payable_7d);
+
+      // 7. 本月回款率
+      document.getElementById('ovCollectRate').textContent = (ov.monthly_collection_rate * 100).toFixed(1) + '%';
+    }
+
+    // ═══════════════ 三列一行进度条渲染 ═══════════════
+
+    // ── 列1：风险仪表盘 ──
+    if (d.risk_dashboard) {
+      var rd = d.risk_dashboard;
+      var rdBars = document.querySelectorAll('#riskDashboardBars .progress-bar-item');
+      var rdGauges = [
+        { key: 'payable_pressure', label: '应付压力', fmt: '%', isComplete: false },
+        { key: 'ar_aging', label: 'AR账龄', fmt: '%', isComplete: false },
+        { key: 'contract_completeness', label: '合同完整', fmt: '%', isComplete: true },
+        { key: 'cash_health', label: '现金总额', fmt: 'money', isComplete: true, isMoney: true },
+      ];
+
+      rdGauges.forEach(function(g, i) {
+        var data = rd[g.key];
+        if (!data || i >= rdBars.length) return;
+        var bar = rdBars[i];
+        bar.querySelector('.pb-label').textContent = g.label;
+        var fill = bar.querySelector('.pb-fill');
+
+        if (g.isMoney) {
+          // 金额型：用金额占 2倍安全线 的比例显示进度条
+          var safeLine = 50000;  // 与后端 SAFETY_LINE 保持一致
+          var pct = Math.min(data.value / (safeLine * 2) * 100, 100);
+          fill.style.width = pct + '%';
+          fill.className = 'pb-fill complete ' + (data.level || 'safe');
+          bar.querySelector('.pb-val').textContent = fmtMoney(data.value);
+        } else {
+          var pct = Math.min(Math.max(data.value, 0), 100);
+          fill.style.width = pct + '%';
+          fill.className = 'pb-fill' + (g.isComplete ? ' complete' : '') + ' ' + (data.level || 'safe');
+          bar.querySelector('.pb-val').textContent = data.value.toFixed(1) + '%';
+        }
+        bar.querySelector('.pb-val').className = 'pb-val ' + (data.level || 'safe');
+      });
+
+      // 无合同客户风险 (第5个bar)
+      var ncr = rd.no_contract_customer_risk;
+      var ncrBar = document.getElementById('riskNoContractBar');
+      if (ncr && ncrBar) {
+        ncrBar.querySelector('.pb-label').textContent = ncr.customers && ncr.customers.length > 0
+          ? '📄 无合同 (' + ncr.customers.length + '家)' : '📄 无合同客户';
+        var ncrPct = Math.min(ncr.value / 100000 * 100, 100);  // 10万为满格
+        var ncrFill = ncrBar.querySelector('.pb-fill');
+        ncrFill.style.width = ncrPct + '%';
+        ncrFill.className = 'pb-fill ' + (ncr.level || 'safe');
+        ncrBar.querySelector('.pb-val').textContent = fmtMoney(ncr.value);
+        ncrBar.querySelector('.pb-val').className = 'pb-val ' + (ncr.level || 'safe');
+      }
+
+      // 品质退款 (第6个bar)
+      var qr = rd.quality_refund;
+      var qrBar = document.getElementById('riskRefundBar');
+      if (qr && qrBar) {
+        var qrPct = Math.min(qr.value / 50000 * 100, 100);  // 5万为满格
+        var qrFill = qrBar.querySelector('.pb-fill');
+        qrFill.style.width = qrPct + '%';
+        qrFill.className = 'pb-fill ' + (qr.level || 'safe');
+        qrBar.querySelector('.pb-val').textContent = fmtMoney(qr.value);
+        qrBar.querySelector('.pb-val').className = 'pb-val ' + (qr.level || 'safe');
+      }
+    }
+
+    // ── 列2：应收应付净敞口 ──
+    if (d.net_exposure) {
+      var ne = d.net_exposure;
+      var maxVal = Math.max(ne.total_receivable, ne.total_payable, Math.abs(ne.net_exposure), 100000);
+
+      // 应收总额
+      var neArFill = document.querySelector('#netExposureBars .progress-bar-item:nth-child(1) .pb-fill');
+      neArFill.style.width = Math.min(ne.total_receivable / maxVal * 100, 100) + '%';
+      neArFill.className = 'pb-fill safe';
+      document.getElementById('neTotalAR').textContent = fmtMoney(ne.total_receivable);
+
+      // 应付总额
+      var neApFill = document.querySelector('#netExposureBars .progress-bar-item:nth-child(2) .pb-fill');
+      neApFill.style.width = Math.min(ne.total_payable / maxVal * 100, 100) + '%';
+      neApFill.className = 'pb-fill warning';
+      document.getElementById('neTotalAP').textContent = fmtMoney(ne.total_payable);
+
+      // 净敞口
+      var neLevel = ne.net_exposure < 0 ? 'danger' : (ne.net_exposure < 50000 ? 'warning' : 'safe');
+      var neNetFill = document.querySelector('#netExposureBars .progress-bar-item:nth-child(3) .pb-fill');
+      neNetFill.style.width = Math.min(Math.abs(ne.net_exposure) / maxVal * 100, 100) + '%';
+      neNetFill.className = 'pb-fill ' + neLevel;
+      var neNetEl = document.getElementById('neNetExposure');
+      neNetEl.textContent = fmtMoney(ne.net_exposure);
+      neNetEl.className = 'pb-val ' + neLevel;
+      document.getElementById('neNetExposureBar').className = 'progress-bar-item ' + neLevel;
+
+      // 覆盖天数
+      var cdVal = ne.cover_days != null ? ne.cover_days : 0;
+      var cdLevel = cdVal < 14 ? 'danger' : (cdVal < 30 ? 'warning' : 'safe');
+      var cdPct = Math.min(cdVal / 60 * 100, 100);  // 60天为满格
+      var neCdFill = document.querySelector('#netExposureBars .progress-bar-item:nth-child(4) .pb-fill');
+      neCdFill.style.width = cdPct + '%';
+      neCdFill.className = 'pb-fill ' + cdLevel;
+      document.getElementById('neCoverDays').textContent = ne.cover_days != null ? ne.cover_days + ' 天' : '---';
+      document.getElementById('neCoverDays').className = 'pb-val ' + cdLevel;
+    }
+
+    // ── 列3：关键风险 ──
+    if (d.key_risks && d.key_risks.length > 0) {
+      var krContainer = document.getElementById('keyRiskBars');
+      krContainer.innerHTML = d.key_risks.map(function(kr, idx) {
+        var level = kr.level || 'warning';
+        var icon = level === 'danger' ? '🔴' : (level === 'warning' ? '🟡' : '🟢');
+        // 有金额的风险显示金额，否则显示严重度百分比
+        var hasAmount = kr.amount != null;
+        var sevPct = level === 'danger' ? 90 : (level === 'warning' ? 60 : 30);
         return [
-          '<div class="alert-item ' + a.level + '">',
-            '<div class="alert-icon">' + icon + '</div>',
-            '<div class="alert-content">',
-              '<div class="alert-title">' + escHtml(a.title) + '</div>',
-              '<div class="alert-detail">' + escHtml(a.detail) + '</div>',
-              '<div class="alert-suggest">💡 ' + escHtml(a.suggestion) + '</div>',
+          '<div class="progress-bar-item ' + level + '" title="' + escHtml(kr.detail) + (kr.suggestion ? '\n💡 ' + kr.suggestion : '') + '">',
+            '<div class="pb-label" style="width:auto;min-width:auto;flex:0 0 auto;margin-right:4px;">' + icon + '</div>',
+            '<div class="pb-label" style="width:auto;min-width:auto;flex:1;">' + escHtml(kr.title) + '</div>',
+            '<div class="pb-track" style="flex:0 0 50px;">',
+              '<div class="pb-fill ' + level + '" style="width:' + sevPct + '%"></div>',
             '</div>',
+            '<div class="pb-val ' + level + '" style="width:auto;min-width:auto;">' + (hasAmount ? fmtMoney(kr.amount) : sevPct + '%') + '</div>',
           '</div>'
         ].join('');
       }).join('');
     } else {
-      alertList.innerHTML = '<div class="alert-item safe" style="justify-content:center;font-size:13px;color:#16a34a;background:#f0fdf4;border-color:#bbf7d0;">✅ 当前无风险预警</div>';
+      document.getElementById('keyRiskBars').innerHTML =
+        '<div class="progress-bar-item safe" style="justify-content:center;padding:8px 0;">' +
+          '<span style="font-size:11px;color:#16a34a;">✅ 当前无关键风险</span>' +
+        '</div>';
     }
+
+    // ═══════════════ 今天先做 3 件事 ═══════════════
+    if (d.action_items && d.action_items.length > 0) {
+      var actionCards = document.querySelectorAll('.action-card');
+      d.action_items.forEach(function(ai, idx) {
+        if (actionCards.length > idx) {
+          var card = actionCards[idx];
+          card.querySelector('.action-card-num').textContent = ai.priority || (idx + 1);
+          card.querySelector('.action-card-title').textContent = ai.title || '';
+          var detail = ai.detail || '';
+          if (ai.amount) {
+            detail += ' <span class="action-card-amount" style="display:block">¥' + fmtMoney(ai.amount) + '</span>';
+          }
+          card.querySelector('.action-card-detail').innerHTML = detail;
+        }
+      });
+      // 隐藏多余的 action card
+      for (var ai = d.action_items.length; ai < 3; ai++) {
+        if (actionCards.length > ai) {
+          actionCards[ai].style.display = 'none';
+        }
+      }
+    }
+
+    // 趋势图
+    drawTrendChart(fc.daily_series);
 
     // 汇总
     var s = d.summary;
@@ -1242,6 +1849,144 @@
     } catch (e) {
       console.error('[report] 加载失败:', e);
       document.getElementById('reportEmpty').textContent = '加载失败，请重试';
+    }
+  }
+
+  /* ─── 收付款面板 ─── */
+  async function loadReceivablePanel() {
+    try {
+      var resp = await fetch(RECEIVABLE_API);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      var data = await resp.json();
+      renderReceivablePanel(data);
+    } catch (e) {
+      console.error('[receivable] 加载失败:', e);
+    }
+  }
+
+  function renderReceivablePanel(d) {
+    document.getElementById('rpRefreshTime').textContent = (d.summary && d.summary.data_refresh_time) || '---';
+
+    var rp = d.receivable_payment;
+    if (!rp) return;
+
+    // ⑥ 概括分析（最顶部）
+    var sa = rp.summary_analysis;
+    var saDiv = document.getElementById('rpSummaryAnalysis');
+    if (sa && sa.text) {
+      var saLevel = sa.level || 'safe';
+      var saBg = saLevel === 'danger' ? '#fef2f2' : (saLevel === 'warning' ? '#fffbeb' : '#f0fdf4');
+      var saBorder = saLevel === 'danger' ? '#fecaca' : (saLevel === 'warning' ? '#fde68a' : '#bbf7d0');
+      var saIcon = saLevel === 'danger' ? '🔴' : (saLevel === 'warning' ? '🟡' : '🟢');
+      saDiv.style.display = 'block';
+      saDiv.style.background = saBg;
+      saDiv.style.borderColor = saBorder;
+      saDiv.innerHTML = '<strong>' + saIcon + ' 资金时间错配分析：</strong>' + escHtml(sa.text);
+    } else {
+      saDiv.style.display = 'none';
+    }
+
+    // ① 客户回款进度
+    if (rp.customer_progress && rp.customer_progress.length > 0) {
+      var progHtml = '';
+      rp.customer_progress.forEach(function(c) {
+        var pct = Math.min(c.progress_pct || 0, 100);
+        var barColor = pct < 30 ? '#dc2626' : (pct < 60 ? '#d97706' : '#16a34a');
+        progHtml += '<div class="rp-progress-item">';
+        progHtml += '<div class="rp-progress-name" title="' + escHtml(c.customer_name) + '">' + escHtml(c.customer_name) + '</div>';
+        progHtml += '<div class="rp-progress-bar-wrap"><div class="rp-progress-bar-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>';
+        progHtml += '<div class="rp-progress-pct">' + pct.toFixed(0) + '%</div>';
+        progHtml += '</div>';
+      });
+      document.getElementById('rpCustomerProgress').innerHTML = progHtml;
+    } else {
+      document.getElementById('rpCustomerProgress').innerHTML = '<div style="font-size:12px;color:#94a3b8;text-align:center;padding:20px;">暂无数据</div>';
+    }
+
+    // ② 供应商付款压力
+    if (rp.supplier_payments && rp.supplier_payments.length > 0) {
+      var supHtml = '';
+      rp.supplier_payments.forEach(function(s) {
+        supHtml += '<div class="rp-supplier-item">';
+        supHtml += '<div><div class="rp-supplier-name">' + escHtml(s.supplier_name) + '</div>';
+        supHtml += '<div class="rp-supplier-detail">' + escHtml(s.detail || s.code || '') + '</div></div>';
+        supHtml += '<div class="rp-supplier-amount">¥' + fmtMoney(s.amount) + '</div>';
+        supHtml += '</div>';
+      });
+      document.getElementById('rpSupplierPayments').innerHTML = supHtml;
+    } else {
+      document.getElementById('rpSupplierPayments').innerHTML = '<div style="font-size:12px;color:#94a3b8;text-align:center;padding:20px;">暂无数据</div>';
+    }
+
+    // ③ 优先催收
+    if (rp.priority_collections && rp.priority_collections.length > 0) {
+      var collHtml = '';
+      rp.priority_collections.forEach(function(c, i) {
+        collHtml += '<div class="rp-collection-item">';
+        collHtml += '<div class="rp-collection-rank">' + (i + 1) + '</div>';
+        collHtml += '<div class="rp-collection-info"><div class="rp-collection-name">' + escHtml(c.customer_name) + '</div>';
+        collHtml += '<div class="rp-collection-meta">逾期 ' + (c.overdue_days || 0) + ' 天 · ' + escHtml(c.expected_date || '') + '</div></div>';
+        collHtml += '<div class="rp-collection-amount">¥' + fmtMoney(c.unreceived_amount) + '</div>';
+        collHtml += '</div>';
+      });
+      document.getElementById('rpPriorityCollection').innerHTML = collHtml;
+    } else {
+      document.getElementById('rpPriorityCollection').innerHTML = '<div style="font-size:12px;color:#16a34a;text-align:center;padding:20px;">✅ 暂无逾期应收</div>';
+    }
+
+    // ④ 近期必须付款
+    if (rp.mandatory_payments) {
+      var mp = rp.mandatory_payments;
+      var mandHtml = '';
+      mandHtml += '<div class="rp-mandatory-item">';
+      mandHtml += '<div><div class="rp-mandatory-label">💰 ' + escHtml(mp.labor_salary.label || '工资社保') + '</div>';
+      mandHtml += '<div class="rp-mandatory-detail">' + escHtml(mp.labor_salary.detail || '') + '</div></div>';
+      mandHtml += '<div class="rp-mandatory-amount">¥' + fmtMoney(mp.labor_salary.amount) + '</div>';
+      mandHtml += '</div>';
+      mandHtml += '<div class="rp-mandatory-item">';
+      mandHtml += '<div><div class="rp-mandatory-label">🏭 ' + escHtml(mp.supplier_due.label || '供应商采购') + '</div>';
+      mandHtml += '<div class="rp-mandatory-detail">' + escHtml(mp.supplier_due.detail || '') + '</div></div>';
+      mandHtml += '<div class="rp-mandatory-amount">¥' + fmtMoney(mp.supplier_due.amount) + '</div>';
+      mandHtml += '</div>';
+      mandHtml += '<div class="rp-mandatory-item">';
+      mandHtml += '<div><div class="rp-mandatory-label">🏠 ' + escHtml(mp.overhead.label || '房租水电税费') + '</div>';
+      mandHtml += '<div class="rp-mandatory-detail">' + escHtml(mp.overhead.detail || '') + '</div></div>';
+      mandHtml += '<div class="rp-mandatory-amount">¥' + fmtMoney(mp.overhead.amount) + '</div>';
+      mandHtml += '</div>';
+      mandHtml += '<div class="rp-mandatory-total">';
+      mandHtml += '<div class="rp-mandatory-total-label">刚性支付合计</div>';
+      mandHtml += '<div class="rp-mandatory-total-value">¥' + fmtMoney(mp.total_rigid) + '</div>';
+      mandHtml += '</div>';
+      document.getElementById('rpMandatoryPayments').innerHTML = mandHtml;
+    } else {
+      document.getElementById('rpMandatoryPayments').innerHTML = '<div style="font-size:12px;color:#94a3b8;text-align:center;padding:20px;">暂无数据</div>';
+    }
+
+    // ⑤ 短期净缺口
+    if (rp.short_term_gap) {
+      var sg = rp.short_term_gap;
+      var gapCard = document.getElementById('rpShortGapCard');
+      if (sg.level === 'danger') {
+        gapCard.style.borderColor = '#fecaca';
+        gapCard.style.background = 'linear-gradient(135deg, #fef2f2, #fff)';
+      } else if (sg.level === 'warning') {
+        gapCard.style.borderColor = '#fde68a';
+        gapCard.style.background = 'linear-gradient(135deg, #fffbeb, #fff)';
+      } else {
+        gapCard.style.borderColor = '#bbf7d0';
+        gapCard.style.background = 'linear-gradient(135deg, #f0fdf4, #fff)';
+      }
+      var gapLabel = sg.gap < 0 ? '资金缺口' : (sg.gap > 0 ? '资金盈余' : '收支平衡');
+      var gapHtml = '';
+      gapHtml += '<div class="rp-gap-row"><span class="rp-gap-label">近期回款 (7天)</span><span class="rp-gap-val" style="color:#16a34a">+' + fmtMoney(sg.recent_income) + '</span></div>';
+      gapHtml += '<div class="rp-gap-row"><span class="rp-gap-label">刚性支出</span><span class="rp-gap-val" style="color:#dc2626">-' + fmtMoney(sg.rigid_expense) + '</span></div>';
+      gapHtml += '<hr class="rp-gap-divider" />';
+      gapHtml += '<div class="rp-gap-result ' + (sg.level || 'warning') + '">';
+      gapHtml += '<div class="rp-gap-result-label">' + gapLabel + '</div>';
+      gapHtml += '<div class="rp-gap-result-value">¥' + fmtMoney(Math.abs(sg.gap)) + '</div>';
+      gapHtml += '<div class="rp-gap-result-sub">当前账面余额 ¥' + fmtMoney(sg.balance) + '</div>';
+      gapHtml += '</div>';
+      document.getElementById('rpShortGapContent').innerHTML = gapHtml;
     }
   }
 

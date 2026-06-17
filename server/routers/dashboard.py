@@ -28,3 +28,13 @@ def get_dashboard(db: Session = Depends(get_db)):
     """
     svc = DashboardService(db)
     return svc.get_dashboard()
+
+
+@router.get("/receivable_payment", summary="获取收付款面板数据")
+def get_receivable_payment(db: Session = Depends(get_db)):
+    """返回收付款面板独立数据（客户回款进度、供应商付款、催收、刚性支付、资金缺口）"""
+    svc = DashboardService(db)
+    return {
+        "receivable_payment": svc._calc_receivable_payment(),
+        "summary": svc._build_summary(),
+    }

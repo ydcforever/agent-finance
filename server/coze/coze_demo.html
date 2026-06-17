@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Coze AI 对话测试</title>
+  <title>Coze AI 对话 + 现金流雷达</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -12,11 +12,57 @@
       background: #f0f2f5;
       color: #1a1a2e;
       min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      padding: 32px 16px;
     }
-    .page { width: 100%; max-width: 960px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* ══════════════════ 布局 ══════════════════ */
+    .layout { display: flex; min-height: 100vh; }
+
+    /* ── 左侧菜单 ── */
+    .sidebar {
+      width: 220px; min-width: 220px;
+      background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+      color: #e2e8f0;
+      display: flex; flex-direction: column;
+      position: sticky; top: 0; height: 100vh;
+      z-index: 100;
+    }
+    .sidebar-brand {
+      padding: 24px 20px 20px;
+      font-size: 18px; font-weight: 700;
+      letter-spacing: -0.3px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .sidebar-brand span { color: #60a5fa; }
+    .sidebar-nav {
+      flex: 1; padding: 12px 0; overflow-y: auto;
+    }
+    .sidebar-nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 20px; margin: 2px 8px;
+      border-radius: 8px; font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: background .15s, color .15s;
+      color: #94a3b8; border: none; background: none;
+      width: calc(100% - 16px); text-align: left;
+    }
+    .sidebar-nav-item:hover { background: rgba(255,255,255,.06); color: #e2e8f0; }
+    .sidebar-nav-item.active { background: rgba(37,99,235,.25); color: #60a5fa; }
+    .sidebar-nav-item .nav-icon { font-size: 18px; width: 22px; text-align: center; flex-shrink: 0; }
+    .sidebar-badge {
+      margin-left: auto; font-size: 10px;
+      background: rgba(96,165,250,.2); color: #60a5fa;
+      padding: 2px 8px; border-radius: 10px; font-weight: 600;
+    }
+
+    /* ── 右侧内容区 ── */
+    .main {
+      flex: 1; min-width: 0;
+      padding: 24px 28px;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+
+    /* ── 页面面板 ── */
+    .page-panel { display: none; flex-direction: column; gap: 20px; }
+    .page-panel.active { display: flex; }
 
     /* ── 通用卡片 ── */
     .card {
@@ -43,7 +89,6 @@
       outline: none; border-color: #2563eb;
       box-shadow: 0 0 0 3px rgba(37,99,235,.12);
     }
-    .hint { font-size: 12px; color: #94a3b8; margin-top: 5px; }
 
     /* ── 上传面板 ── */
     .upload-panel {
@@ -57,9 +102,6 @@
     .upload-icon { font-size: 32px; line-height: 1; margin-bottom: 8px; }
     .upload-text { font-size: 13px; color: #64748b; }
     .upload-text strong { color: #2563eb; }
-    .upload-status { margin-top: 10px; font-size: 13px; }
-    .upload-status.ok  { color: #16a34a; }
-    .upload-status.err { color: #dc2626; }
 
     /* ── 附件标签列表 ── */
     .attachment-section { margin-top: 14px; }
@@ -86,9 +128,6 @@
       transition: background .15s;
     }
     .attachment-tag .tag-rm:hover { background: #93c5fd; }
-    .attachment-empty {
-      font-size: 12px; color: #94a3b8; font-style: italic;
-    }
 
     /* ── 操作按钮行 ── */
     .btn-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
@@ -128,78 +167,534 @@
       white-space: pre-wrap; word-break: break-word;
       max-height: 240px; overflow-y: auto;
     }
-
     .divider { border: none; border-top: 1px solid #f1f5f9; margin: 16px 0; }
 
-    @media (max-width: 600px) {
-      .card { padding: 18px 16px; }
+    /* ══════════════════ 现金流雷达样式 ══════════════════ */
+    .dashboard-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 18px;
+    }
+    .dashboard-header .card-title { margin-bottom: 0; }
+    .dashboard-refresh {
+      font-size: 12px; color: #94a3b8;
+    }
+    .dashboard-refresh a {
+      color: #2563eb; cursor: pointer; text-decoration: none; margin-left: 8px;
+    }
+    .dashboard-refresh a:hover { text-decoration: underline; }
+
+    /* KPI 卡片行 */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .kpi-card {
+      background: linear-gradient(135deg, #f8fafc, #fff);
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 18px 20px;
+      transition: box-shadow .15s;
+    }
+    .kpi-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+    .kpi-card.danger  { border-color: #fecaca; background: linear-gradient(135deg, #fef2f2, #fff); }
+    .kpi-card.warning { border-color: #fde68a; background: linear-gradient(135deg, #fffbeb, #fff); }
+    .kpi-card.safe    { border-color: #bbf7d0; background: linear-gradient(135deg, #f0fdf4, #fff); }
+    .kpi-label {
+      font-size: 12px; color: #64748b; margin-bottom: 6px; font-weight: 500;
+    }
+    .kpi-value {
+      font-size: 24px; font-weight: 700; color: #0f172a; line-height: 1.2;
+    }
+    .kpi-value.danger  { color: #dc2626; }
+    .kpi-value.warning { color: #d97706; }
+    .kpi-value.safe    { color: #16a34a; }
+
+    /* 拆解明细 */
+    .breakdown-list {
+      margin-top: 8px;
+      font-size: 12px; color: #475569;
+    }
+    .breakdown-item {
+      display: flex; justify-content: space-between;
+      padding: 3px 0; border-bottom: 1px dotted #f1f5f9;
+    }
+    .breakdown-item:last-child { border-bottom: none; }
+
+    /* 现金流推演 */
+    .forecast-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .forecast-card {
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px; padding: 16px;
+      text-align: center;
+    }
+    .forecast-title { font-size: 13px; font-weight: 600; color: #1e293b; }
+    .forecast-desc  { font-size: 11px; color: #94a3b8; margin-bottom: 10px; }
+    .forecast-net {
+      font-size: 22px; font-weight: 700; margin: 6px 0;
+    }
+    .forecast-net.healthy { color: #16a34a; }
+    .forecast-net.warning { color: #d97706; }
+    .forecast-net.danger  { color: #dc2626; }
+    .forecast-detail {
+      font-size: 11px; color: #64748b; line-height: 1.6;
+    }
+    .forecast-end-balance {
+      margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9;
+      font-size: 13px; font-weight: 600; color: #0f172a;
+    }
+
+    /* 趋势图容器 */
+    .trend-chart {
+      position: relative;
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .trend-chart-title {
+      font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 12px;
+    }
+    .trend-canvas-wrap { width: 100%; height: 200px; }
+    .trend-legend {
+      display: flex; gap: 18px; justify-content: center;
+      font-size: 11px; color: #64748b; margin-top: 10px;
+    }
+    .trend-legend span { display: flex; align-items: center; gap: 5px; }
+    .trend-legend .dot { width: 10px; height: 10px; border-radius: 3px; }
+
+    /* 预警列表 */
+    .alert-list { display: flex; flex-direction: column; gap: 10px; }
+    .alert-item {
+      display: flex; gap: 12px; padding: 14px 16px;
+      border-radius: 10px; border: 1.5px solid;
+    }
+    .alert-item.danger  { background: #fef2f2; border-color: #fecaca; }
+    .alert-item.warning { background: #fffbeb; border-color: #fde68a; }
+    .alert-icon {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+    .alert-item.danger .alert-icon  { background: #fee2e2; color: #dc2626; }
+    .alert-item.warning .alert-icon { background: #fef3c7; color: #d97706; }
+    .alert-content { flex: 1; }
+    .alert-title   { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+    .alert-detail  { font-size: 12px; color: #475569; line-height: 1.5; margin-bottom: 4px; }
+    .alert-suggest { font-size: 11px; color: #64748b; font-style: italic; }
+
+    /* 汇总条 */
+    .summary-bar {
+      display: flex; gap: 24px; justify-content: center;
+      padding: 12px 16px;
+      background: #f8fafc; border-radius: 10px;
+      font-size: 13px; color: #475569;
+    }
+    .summary-bar strong { color: #0f172a; }
+
+    @media (max-width: 1024px) {
+      .sidebar { width: 180px; min-width: 180px; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .forecast-row { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      .kpi-row { grid-template-columns: 1fr; }
+    }
+
+    /* ══════════════════ 经营分析报告样式 ══════════════════ */
+    .report-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .report-kpi-item {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .report-kpi-label {
+      font-size: 11px;
+      color: #64748b;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    .report-kpi-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .report-kpi-value.positive { color: #16a34a; }
+    .report-kpi-value.negative { color: #dc2626; }
+    .report-kpi-unit {
+      font-size: 12px;
+      font-weight: 400;
+      color: #94a3b8;
+      margin-left: 2px;
+    }
+    .report-insights {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .report-insight-box {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .report-insight-box.suggestions {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
+    .report-insight-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #92400e;
+      margin-bottom: 6px;
+    }
+    .report-insight-box.suggestions .report-insight-title {
+      color: #166534;
+    }
+    .report-insight-item {
+      font-size: 12px;
+      color: #78716c;
+      line-height: 1.6;
+      padding: 2px 0;
+    }
+    .report-insight-box.suggestions .report-insight-item {
+      color: #4ade80;
+      color: #166534;
+    }
+    .report-tag {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .15s;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      color: #475569;
+    }
+    .report-tag:hover {
+      border-color: #8b5cf6;
+      color: #8b5cf6;
+      background: #f5f3ff;
+    }
+    .report-tag.active {
+      background: #8b5cf6;
+      color: #fff;
+      border-color: #8b5cf6;
+    }
+
+    /* 报告详情段落 */
+    .report-section {
+      margin-bottom: 20px;
+    }
+    .report-section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .report-sub-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      margin: 10px 0 6px;
+    }
+    .report-sub-title.risk {
+      color: #b91c1c;
+    }
+    .report-sub-title.suggestion {
+      color: #166534;
+    }
+    .report-item {
+      font-size: 12px;
+      color: #475569;
+      line-height: 1.7;
+      padding: 3px 0 3px 8px;
+      border-left: 2px solid #e2e8f0;
+      margin-bottom: 3px;
+    }
+    .report-item.risk-item {
+      background: #fff5f5;
+      border-left-color: #fca5a5;
+    }
+    .report-item.suggestion-item {
+      background: #f0fdf4;
+      border-left-color: #86efac;
+    }
+    .report-conclusion {
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+
+    /* 报告表格 */
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+    .report-table th {
+      text-align: left;
+      padding: 6px 10px;
+      background: #f1f5f9;
+      color: #475569;
+      font-weight: 600;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .report-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+    }
+
+    /* 现金流摘要 */
+    .cashflow-summary {
+      background: linear-gradient(135deg, #eff6ff, #f8fafc);
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+    }
+    .cf-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 13px;
+      color: #475569;
+    }
+    .cf-row.income { color: #16a34a; font-weight: 600; }
+    .cf-row.expense { color: #dc2626; font-weight: 600; }
+    .cf-row.net {
+      border-top: 1px dashed #bfdbfe;
+      margin-top: 4px;
+      padding-top: 8px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .cf-row.end {
+      font-size: 15px;
+      font-weight: 700;
+      color: #2563eb;
+      margin-top: 2px;
+    }
+
+    @media (max-width: 768px) {
+      .report-insights { grid-template-columns: 1fr; }
+      .report-kpi-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
 <body>
-<div class="page">
+<div class="layout">
 
-  <!-- ① 上传文件 -->
-  <div class="card">
-    <div class="card-title"><span class="dot" style="background:#f59e0b"></span>① 上传文件（自动附加到对话）</div>
-
-    <div class="upload-panel" id="uploadPanel" onclick="document.getElementById('uploadInput').click()">
-      <input type="file" id="uploadInput" />
-      <div class="upload-icon">📎</div>
-      <div class="upload-text">点击或拖拽文件至此<br><strong>上传后自动附加到对话</strong></div>
-    </div>
-    <div class="upload-status" id="uploadStatus"></div>
-
-    <!-- 已上传附件标签 -->
-    <div class="attachment-section" id="attachmentSection" style="display:none;">
-      <label style="margin-top:12px;">已附加文件（对话时自动携带，点击 × 移除）</label>
-      <div class="attachment-list" id="attachmentList"></div>
-    </div>
-  </div>
-
-  <!-- ② 发送对话 -->
-  <div class="card">
-    <div class="card-title"><span class="dot" style="background:#2563eb"></span>② 发送对话</div>
-
-    <label for="content">对话内容 <span style="color:#ef4444">*</span></label>
-    <textarea id="content" placeholder="例如：请帮我分析一下这份财务报告中的现金流状况。"></textarea>
-
-    <div class="hint" id="attachmentHint" style="display:none;margin-top:10px;"></div>
-
-    <hr class="divider" />
-
-    <div class="btn-row">
-      <button class="btn-primary" id="sendBtn" onclick="doChat()">开始流式对话</button>
-      <button class="btn-primary" onclick="clearOutput()" style="background:linear-gradient(135deg,#64748b,#475569)">清空输出</button>
-      <span class="status-text" id="chatStatus">就绪</span>
+  <!-- ══════════════════ 左侧菜单 ══════════════════ -->
+  <div class="sidebar">
+    <div class="sidebar-brand">📊 <span>财务</span>智控台</div>
+    <div class="sidebar-nav">
+      <button class="sidebar-nav-item active" onclick="switchPage('chat')">
+        <span class="nav-icon">💬</span>AI 对话
+      </button>
+      <button class="sidebar-nav-item" onclick="switchPage('dashboard')">
+        <span class="nav-icon">📡</span>现金流雷达
+        <span class="sidebar-badge">实时</span>
+      </button>
+      <button class="sidebar-nav-item" onclick="switchPage('report')">
+        <span class="nav-icon">📊</span>经营分析报告
+      </button>
     </div>
   </div>
 
-  <!-- ③ 流式输出 -->
-  <div class="card">
-    <div class="output-header">
-      <div class="card-title" style="margin-bottom:0"><span class="dot" style="background:#34d399"></span>AI 流式输出</div>
-      <span class="badge" id="charCount">0 字</span>
-    </div>
-    <div class="output" id="output"><span class="t-system">等待请求...</span></div>
-  </div>
+  <!-- ══════════════════ 右侧内容区 ══════════════════ -->
+  <div class="main">
 
-  <!-- ④ 请求参数预览 -->
-  <div class="card">
-    <div class="card-title"><span class="dot" style="background:#8b5cf6"></span>本次请求参数</div>
-    <div class="json-preview" id="reqPreview">（发送对话后显示）</div>
+    <!-- 页面1：AI 对话 + 输出（合并） -->
+    <div class="page-panel active" id="page-chat">
+
+      <!-- 对话输入 -->
+      <div class="card">
+        <div class="card-title"><span class="dot" style="background:#2563eb"></span>AI 对话（可直接带文件发送）</div>
+
+        <label for="content">对话内容 <span style="color:#ef4444">*</span></label>
+        <textarea id="content" placeholder="例如：请帮我分析一下这份财务报告中的现金流状况。"></textarea>
+
+        <div class="upload-panel" id="uploadPanel" onclick="document.getElementById('uploadInput').click()" style="margin-top:14px;">
+          <input type="file" id="uploadInput" multiple />
+          <div class="upload-icon">📎</div>
+          <div class="upload-text">点击选择文件（支持多选）<br><strong>文件随对话一起发送，无需预先上传</strong></div>
+        </div>
+
+        <div class="attachment-section" id="attachmentSection" style="display:none;">
+          <label style="margin-top:12px;">待发送文件（点击 × 移除）</label>
+          <div class="attachment-list" id="attachmentList"></div>
+        </div>
+
+        <hr class="divider" />
+
+        <div class="btn-row">
+          <button class="btn-primary" id="sendBtn" onclick="doChat()">开始流式对话</button>
+          <button class="btn-primary" onclick="clearOutput()" style="background:linear-gradient(135deg,#64748b,#475569)">清空输出</button>
+          <span class="status-text" id="chatStatus">就绪</span>
+        </div>
+
+        <div style="margin-top:20px;">
+          <div class="card-title"><span class="dot" style="background:#8b5cf6"></span>本次请求参数</div>
+          <div class="json-preview" id="reqPreview">（发送对话后显示）</div>
+        </div>
+      </div>
+
+      <!-- 流式输出（同一页面） -->
+      <div class="card">
+        <div class="output-header">
+          <div class="card-title" style="margin-bottom:0"><span class="dot" style="background:#34d399"></span>AI 流式输出</div>
+          <span class="badge" id="charCount">0 字</span>
+        </div>
+        <div class="output" id="output"><span class="t-system">等待请求...</span></div>
+      </div>
+    </div>
+
+    <!-- 页面2：现金流雷达 -->
+    <div class="page-panel" id="page-dashboard">
+      <div class="card">
+        <div class="dashboard-header">
+          <div class="card-title" style="margin-bottom:0"><span class="dot" style="background:#2563eb"></span>现金流雷达</div>
+          <div class="dashboard-refresh">
+            数据刷新时间：<span id="refreshTime">加载中...</span>
+            <a onclick="loadDashboard()">刷新</a>
+          </div>
+        </div>
+
+        <div class="kpi-row" id="kpiRow">
+          <div class="kpi-card"><div class="kpi-label">账面余额</div><div class="kpi-value">---</div></div>
+          <div class="kpi-card"><div class="kpi-label">未来30天回款</div><div class="kpi-value">---</div></div>
+          <div class="kpi-card"><div class="kpi-label">未来30天支出</div><div class="kpi-value">---</div></div>
+          <div class="kpi-card"><div class="kpi-label">资金缺口/安全垫</div><div class="kpi-value">---</div></div>
+        </div>
+
+        <div class="forecast-row" id="forecastRow">
+          <div class="forecast-card"><div class="forecast-title">7天视角</div><div class="forecast-desc">加载中...</div></div>
+          <div class="forecast-card"><div class="forecast-title">15天视角</div><div class="forecast-desc">加载中...</div></div>
+          <div class="forecast-card"><div class="forecast-title">30天视角</div><div class="forecast-desc">加载中...</div></div>
+        </div>
+
+        <div class="trend-chart">
+          <div class="trend-chart-title">未来30天现金流推演</div>
+          <div class="trend-canvas-wrap"><canvas id="trendCanvas"></canvas></div>
+          <div class="trend-legend">
+            <span><span class="dot" style="background:#16a34a"></span>收入</span>
+            <span><span class="dot" style="background:#dc2626"></span>支出</span>
+            <span><span class="dot" style="background:#2563eb"></span>余额</span>
+          </div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:12px;">⚠ 风险预警</div>
+          <div class="alert-list" id="alertList">
+            <div class="alert-item warning" style="justify-content:center;font-size:12px;color:#64748b;">加载中...</div>
+          </div>
+        </div>
+
+        <div class="summary-bar" id="summaryBar">
+          应收：--- | 应付：--- | 账面余额：---
+        </div>
+      </div>
+    </div>
+
+    <!-- 页面3：经营分析报告 -->
+    <div class="page-panel" id="page-report">
+      <div class="card">
+        <div class="dashboard-header">
+          <div class="card-title" style="margin-bottom:0"><span class="dot" style="background:#8b5cf6"></span>经营分析报告</div>
+          <div class="dashboard-refresh">
+            最近更新：<span id="reportTime">---</span>
+            <a onclick="loadReport()">刷新</a>
+          </div>
+        </div>
+
+        <!-- 提取的结构化数据 -->
+        <div id="reportDetail" style="display:none;">
+          <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:14px;" id="reportTitle">---</div>
+
+          <!-- KPI 网格 -->
+          <div class="report-kpi-grid" id="reportKpis"></div>
+
+          <!-- 风险 & 建议 -->
+          <div class="report-insights" id="reportInsights"></div>
+
+          <!-- 原始文本（可折叠） -->
+          <details style="margin-top:16px;">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:#64748b;">📝 查看原始分析文本</summary>
+            <pre id="reportRaw" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-top:8px;font-size:12px;line-height:1.7;white-space:pre-wrap;max-height:400px;overflow-y:auto;color:#334155;">---</pre>
+          </details>
+        </div>
+
+        <div id="reportEmpty" style="text-align:center;padding:40px 20px;color:#94a3b8;font-size:14px;">
+          📭 暂无分析报告<br><span style="font-size:12px;">完成一次 AI 对话后，报告将自动保存到这里</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </div>
 
 <script>
   /* ─── 配置 ─── */
-  var UPLOAD_API = '/yyy/coze/upload';
-  var CHAT_API   = '/yyy/coze/chat';
+  var CHAT_API = '/yyy/coze/chat';
+  var DASHBOARD_API = '/yyy/dashboard/view';
+
+  /* ─── 页面切换 ─── */
+  function switchPage(pageId) {
+    document.querySelectorAll('.sidebar-nav-item').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.page-panel').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById('page-' + pageId).classList.add('active');
+
+    var navs = document.querySelectorAll('.sidebar-nav-item');
+    var pageMap = { chat: 0, dashboard: 1, report: 2 };
+    if (pageMap[pageId] !== undefined) {
+      navs[pageMap[pageId]].classList.add('active');
+    }
+
+    // 切到看板时重绘趋势图
+    if (pageId === 'dashboard') {
+      setTimeout(function() {
+        window.dispatchEvent(new Event('resize'));
+      }, 100);
+    }
+    // 切到报告时加载
+    if (pageId === 'report') {
+      loadReport();
+    }
+  }
 
   /* ─── 状态 ─── */
-  // attachments: [{ file_id, file_name, bytes }]
-  var attachments = [];
+  var pendingFiles = [];
+  var dashboardCache = null;  // 缓存看板数据，resize 时直接用
 
   /* ─── 工具函数 ─── */
   function escHtml(s) {
@@ -208,70 +703,58 @@
     return d.innerHTML;
   }
 
+  function fmtMoney(v) {
+    if (v == null || isNaN(v)) return '---';
+    v = Number(v);
+    var prefix = v < 0 ? '-' : '';
+    var abs = Math.abs(v);
+    if (abs >= 10000) return prefix + (abs / 10000).toFixed(1) + '万';
+    return prefix + abs.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function fmtMoneyFull(v) {
+    if (v == null || isNaN(v)) return '---';
+    return Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
   /* ─── 附件标签渲染 ─── */
   function renderAttachments() {
     var list    = document.getElementById('attachmentList');
     var section = document.getElementById('attachmentSection');
-    var hint    = document.getElementById('attachmentHint');
 
     list.innerHTML = '';
-    if (attachments.length === 0) {
+    if (pendingFiles.length === 0) {
       section.style.display = 'none';
-      hint.style.display = 'none';
       return;
     }
 
     section.style.display = '';
-    hint.style.display = '';
-    hint.textContent = '本次对话将携带 ' + attachments.length + ' 个文件（file_id 自动填充，无需手动输入）';
-
-    attachments.forEach(function(att, idx) {
+    pendingFiles.forEach(function(f, idx) {
       var tag = document.createElement('span');
       tag.className = 'attachment-tag';
       tag.innerHTML =
-        '<span class="tag-name" title="' + escHtml(att.file_id) + '">📄 ' + escHtml(att.file_name || '未命名') + '</span>' +
-        '<button class="tag-rm" onclick="removeAttachment(' + idx + ')">×</button>';
+        '<span class="tag-name">📄 ' + escHtml(f.name) + ' (' + formatSize(f.size) + ')</span>' +
+        '<button class="tag-rm" onclick="removeFile(' + idx + ')">×</button>';
       list.appendChild(tag);
     });
   }
 
-  function removeAttachment(idx) {
-    attachments.splice(idx, 1);
+  function removeFile(idx) {
+    pendingFiles.splice(idx, 1);
     renderAttachments();
+    updateReqPreview();
   }
 
-  /* ─── 上传文件 ─── */
-  function doUpload(file) {
-    var statusEl = document.getElementById('uploadStatus');
-    statusEl.textContent = '上传中...';
-    statusEl.className = 'upload-status';
-
-    var fd = new FormData();
-    fd.append('file', file, file.name);
-
-    fetch(UPLOAD_API, { method: 'POST', body: fd })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (data.error) throw new Error(data.error);
-        // 自动加入附件列表 —— 无需用户任何操作
-        attachments.push({
-          file_id:   data.file_id   || '',
-          file_name: data.file_name || file.name,
-          bytes:      data.bytes     || 0,
-        });
-        renderAttachments();
-        statusEl.innerHTML = '✅ 上传成功：' + escHtml(data.file_name || file.name) + '（已自动附加到对话）';
-        statusEl.className = 'upload-status ok';
-      })
-      .catch(function(err) {
-        statusEl.textContent = '❌ 上传失败：' + err.message;
-        statusEl.className = 'upload-status err';
-      });
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
   }
 
-  /* ─── 拖拽 & 点击上传 ─── */
+  /* ─── 文件选择 ─── */
   (function() {
     var panel = document.getElementById('uploadPanel');
+
     panel.addEventListener('dragover', function(e) {
       e.preventDefault();
       panel.style.borderColor = '#2563eb';
@@ -286,30 +769,31 @@
       panel.style.borderColor = '';
       panel.style.background = '';
       if (e.dataTransfer.files.length > 0) {
-        // 支持多文件：逐个上传
         for (var i = 0; i < e.dataTransfer.files.length; i++) {
-          doUpload(e.dataTransfer.files[i]);
+          pendingFiles.push(e.dataTransfer.files[i]);
         }
+        renderAttachments();
+        updateReqPreview();
+      }
+    });
+
+    document.getElementById('uploadInput').addEventListener('change', function() {
+      if (this.files.length > 0) {
+        for (var i = 0; i < this.files.length; i++) {
+          pendingFiles.push(this.files[i]);
+        }
+        renderAttachments();
+        updateReqPreview();
+        this.value = '';
       }
     });
   })();
 
-  document.getElementById('uploadInput').addEventListener('change', function() {
-    if (this.files.length > 0) {
-      for (var i = 0; i < this.files.length; i++) {
-        doUpload(this.files[i]);
-      }
-      this.value = ''; // 允许重复选同一文件
-    }
-  });
-
   /* ─── 请求预览 ─── */
   function updateReqPreview() {
-    var fids = attachments.map(function(a) { return a.file_id; });
     var preview = {
-      content:   document.getElementById('content').value || '（空）',
-      file_ids:  fids.length > 0 ? fids.join(',') : '（无附件）',
-      attachments: attachments.map(function(a) { return { file_name: a.file_name, file_id: a.file_id }; })
+      content: document.getElementById('content').value || '（空）',
+      files: pendingFiles.map(function(f) { return f.name; }),
     };
     document.getElementById('reqPreview').textContent = JSON.stringify(preview, null, 2);
   }
@@ -350,28 +834,22 @@
     var content = document.getElementById('content').value.trim();
     if (!content) { alert('请输入对话内容！'); return; }
 
-    var sendBtn   = document.getElementById('sendBtn');
+    var sendBtn    = document.getElementById('sendBtn');
     var chatStatus = document.getElementById('chatStatus');
-    var out       = document.getElementById('output');
+    var out        = document.getElementById('output');
 
-    // 构造 file_ids
-    var fids = attachments.map(function(a) { return a.file_id; });
-
-    // 更新预览
     updateReqPreview();
 
-    // 重置输出
     fullText = '';
-    out.innerHTML = '<span class="t-system">▋ 连接中...</span>';
+    out.innerHTML = '<span class="t-system">▋ 上传文件 & 连接中...</span>';
     document.getElementById('charCount').textContent = '0 字';
     sendBtn.disabled = true;
-    chatStatus.textContent = '流式响应中...';
+    chatStatus.textContent = '发送中...';
 
-    // 构造 FormData
     var fd = new FormData();
     fd.append('content', content);
-    if (fids.length > 0) {
-      fd.append('file_ids', fids.join(','));
+    for (var i = 0; i < pendingFiles.length; i++) {
+      fd.append('files', pendingFiles[i], pendingFiles[i].name);
     }
 
     var response;
@@ -392,7 +870,6 @@
       return;
     }
 
-    /* ── SSE 读取 ── */
     var reader = response.body.getReader();
     currentReader = reader;
     var decoder = new TextDecoder('utf-8');
@@ -415,10 +892,26 @@
           var evt;
           try { evt = JSON.parse(payload); } catch (e) { continue; }
 
-          if (evt.type === 'chunk') {
+          if (evt.type === 'upload_result') {
+            if (evt.errors && evt.errors.length > 0) {
+              var warnEl = document.createElement('span');
+              warnEl.className = 't-system';
+              warnEl.textContent = '⚠ 部分文件上传失败：' + evt.errors.map(function(e) { return e.file_name; }).join(', ') + '\n';
+              out.appendChild(warnEl);
+            }
+            chatStatus.textContent = '流式响应中...';
+
+          } else if (evt.type === 'answer_chunk') {
             fullText += (evt.text || '');
             renderText();
             document.getElementById('charCount').textContent = fullText.length + ' 字';
+
+          } else if (evt.type === 'reasoning_chunk') {
+            var thinkEl = document.createElement('span');
+            thinkEl.className = 't-system';
+            thinkEl.textContent = '💭 ' + (evt.text || '');
+            out.appendChild(thinkEl);
+            out.scrollTop = out.scrollHeight;
 
           } else if (evt.type === 'done') {
             var doneEl = document.createElement('span');
@@ -427,6 +920,11 @@
             out.appendChild(doneEl);
             out.scrollTop = out.scrollHeight;
             chatStatus.textContent = '完成';
+            pendingFiles = [];
+            renderAttachments();
+            // 对话完成后刷新看板 + 保存经营分析报告
+            setTimeout(loadDashboard, 500);
+            setTimeout(saveReportToBackend, 800);
 
           } else if (evt.type === 'error') {
             var errEl = document.createElement('span');
@@ -445,6 +943,550 @@
       currentReader = null;
     }
   }
+
+  /* ══════════════════ 现金流雷达渲染 ══════════════════ */
+
+  async function loadDashboard() {
+    try {
+      var resp = await fetch(DASHBOARD_API);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      var data = await resp.json();
+      dashboardCache = data;
+      renderDashboard(data);
+    } catch (err) {
+      console.error('加载看板失败:', err);
+      document.getElementById('refreshTime').textContent = '加载失败';
+    }
+  }
+
+  function renderDashboard(d) {
+    var kpi = d.kpi_cards;
+    var fc  = d.cashflow_forecast;
+
+    document.getElementById('refreshTime').textContent = d.summary.data_refresh_time || '---';
+
+    // KPI 卡片
+    var kpiRow = document.getElementById('kpiRow');
+    var cards = [
+      { label: '当前账面余额', value: kpi.current_balance.value, level: 'safe' },
+      { label: '未来30天预计回款', value: kpi.expected_income_30d.value, level: 'safe',
+        breakdown: kpi.expected_income_30d.breakdown },
+      { label: '未来30天预计支出', value: kpi.expected_expense_30d.value, level: 'safe',
+        breakdown: kpi.expected_expense_30d.breakdown },
+      { label: kpi.funding_gap.label, value: kpi.funding_gap.value, level: kpi.funding_gap.level },
+    ];
+
+    kpiRow.innerHTML = cards.map(function(c) {
+      var levelClass = c.level || '';
+      var html = '<div class="kpi-card ' + levelClass + '">';
+      html += '<div class="kpi-label">' + escHtml(c.label) + '</div>';
+      html += '<div class="kpi-value ' + levelClass + '">' + fmtMoney(c.value) + '</div>';
+      if (c.breakdown) {
+        html += '<div class="breakdown-list">';
+        var items = c.breakdown.by_customer || c.breakdown.by_category || {};
+        var keys = Object.keys(items);
+        if (keys.length > 0) {
+          var topKeys = keys.slice(0, 4);
+          for (var i = 0; i < topKeys.length; i++) {
+            html += '<div class="breakdown-item"><span>' + escHtml(topKeys[i]) + '</span><span>' + fmtMoney(items[topKeys[i]]) + '</span></div>';
+          }
+          if (keys.length > 4) {
+            html += '<div class="breakdown-item" style="color:#94a3b8">...共' + keys.length + '项</div>';
+          }
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }).join('');
+
+    // 现金流推演
+    var forecastRow = document.getElementById('forecastRow');
+    forecastRow.innerHTML = fc.perspectives.map(function(p) {
+      return [
+        '<div class="forecast-card">',
+          '<div class="forecast-title">' + escHtml(p.title) + '</div>',
+          '<div class="forecast-desc">' + escHtml(p.description) + '</div>',
+          '<div class="forecast-net ' + p.health + '">' + (p.net_change >= 0 ? '+' : '') + fmtMoney(p.net_change) + '</div>',
+          '<div class="forecast-detail">期初 ' + fmtMoney(p.start_balance) + ' → 期末 ' + fmtMoney(p.end_balance) + '</div>',
+          '<div class="forecast-end-balance ' + p.health + '" style="font-size:12px;font-weight:500;color:' + (p.health==='danger'?'#dc2626':p.health==='warning'?'#d97706':'#16a34a') + '">预计期末余额 ' + fmtMoney(p.end_balance) + '</div>',
+        '</div>'
+      ].join('');
+    }).join('');
+
+    // 趋势图
+    drawTrendChart(fc.daily_series);
+
+    // 预警
+    var alertList = document.getElementById('alertList');
+    if (d.alerts && d.alerts.length > 0) {
+      alertList.innerHTML = d.alerts.map(function(a) {
+        var icon = a.level === 'danger' ? '🔴' : '🟡';
+        return [
+          '<div class="alert-item ' + a.level + '">',
+            '<div class="alert-icon">' + icon + '</div>',
+            '<div class="alert-content">',
+              '<div class="alert-title">' + escHtml(a.title) + '</div>',
+              '<div class="alert-detail">' + escHtml(a.detail) + '</div>',
+              '<div class="alert-suggest">💡 ' + escHtml(a.suggestion) + '</div>',
+            '</div>',
+          '</div>'
+        ].join('');
+      }).join('');
+    } else {
+      alertList.innerHTML = '<div class="alert-item safe" style="justify-content:center;font-size:13px;color:#16a34a;background:#f0fdf4;border-color:#bbf7d0;">✅ 当前无风险预警</div>';
+    }
+
+    // 汇总
+    var s = d.summary;
+    document.getElementById('summaryBar').innerHTML =
+      '应收：<strong>' + fmtMoneyFull(s.total_receivable) + '</strong> 元 &nbsp;|&nbsp; ' +
+      '应付：<strong>' + fmtMoneyFull(s.total_payable) + '</strong> 元 &nbsp;|&nbsp; ' +
+      '账面余额：<strong>' + fmtMoneyFull(s.current_balance) + '</strong> 元';
+  }
+
+  /* ─── Canvas 趋势图 ─── */
+  function drawTrendChart(series) {
+    var canvas = document.getElementById('trendCanvas');
+    if (!canvas) return;
+    var wrap = canvas.parentElement;
+
+    var dpr = window.devicePixelRatio || 1;
+    var rect = wrap.getBoundingClientRect();
+    var w = rect.width;
+    var h = 200;
+    canvas.width  = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width  = w + 'px';
+    canvas.style.height = h + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var pad = { top: 20, right: 20, bottom: 30, left: 60 };
+    var cw = w - pad.left - pad.right;
+    var ch = h - pad.top - pad.bottom;
+
+    if (!series || series.length === 0) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('暂无趋势数据', w / 2, h / 2);
+      return;
+    }
+
+    var incomes  = series.map(function(p) { return p.income; });
+    var expenses = series.map(function(p) { return p.expense; });
+    var balances = series.map(function(p) { return p.balance; });
+    var allVals = incomes.concat(expenses).concat(balances);
+    var maxVal = Math.max.apply(null, allVals) || 1;
+    var minVal = Math.min.apply(null, balances.concat([0]));
+
+    var yRange = maxVal - minVal || 1;
+    var yTop   = maxVal + yRange * 0.1;
+    var yBot   = minVal - yRange * 0.1;
+
+    function x(i)  { return pad.left + (i / Math.max(series.length - 1, 1)) * cw; }
+    function y(v)  { return pad.top + (1 - (v - yBot) / (yTop - yBot)) * ch; }
+
+    // 网格线
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 0.5;
+    var gridLines = 5;
+    for (var g = 0; g <= gridLines; g++) {
+      var gy = pad.top + (g / gridLines) * ch;
+      ctx.beginPath();
+      ctx.moveTo(pad.left, gy);
+      ctx.lineTo(pad.left + cw, gy);
+      ctx.stroke();
+
+      var labelVal = yTop - (g / gridLines) * (yTop - yBot);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(fmtMoney(labelVal), pad.left - 6, gy + 3);
+    }
+
+    // X轴日期
+    var showDates = series.length <= 7
+      ? series.map(function(p) { return p.date.slice(5); })
+      : series.filter(function(_, i) { return i % Math.ceil(series.length / 6) === 0 || i === series.length - 1; })
+          .map(function(p) { return p.date.slice(5); });
+    var xIdx = series.length <= 7
+      ? series.map(function(_, i) { return i; })
+      : series.map(function(_, i) { return i; })
+          .filter(function(_, i) { return i % Math.ceil(series.length / 6) === 0 || i === series.length - 1; });
+    for (var xi = 0; xi < showDates.length; xi++) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(showDates[xi], x(xIdx[xi]), pad.top + ch + 16);
+    }
+
+    // 辅助线
+    var bal0 = balances[0] || 0;
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y(bal0));
+    ctx.lineTo(pad.left + cw, y(bal0));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    function drawLine(vals, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (var i = 0; i < vals.length; i++) {
+        var px = x(i), py = y(vals[i]);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      var step = Math.max(1, Math.floor(vals.length / 12));
+      for (var i = 0; i < vals.length; i += step) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x(i), y(vals[i]), 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 余额面积
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x(0), y(bal0));
+    for (var i = 0; i < balances.length; i++) ctx.lineTo(x(i), y(balances[i]));
+    ctx.lineTo(x(balances.length - 1), pad.top + ch);
+    ctx.lineTo(x(0), pad.top + ch);
+    ctx.closePath();
+    var grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+    grad.addColorStop(0, 'rgba(37,99,235,0.12)');
+    grad.addColorStop(1, 'rgba(37,99,235,0.01)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.restore();
+
+    drawLine(balances, '#2563eb');
+    drawLine(incomes,  '#16a34a');
+    drawLine(expenses, '#dc2626');
+
+    // 柱状图
+    var barW = Math.max(2, cw / series.length * 0.4);
+    for (var i = 0; i < series.length; i++) {
+      var cx = x(i);
+      if (incomes[i] > 0) {
+        ctx.fillStyle = 'rgba(22,163,74,0.35)';
+        ctx.fillRect(cx - barW, y(incomes[i]), barW * 2, Math.abs(y(incomes[i]) - y(0)));
+      }
+      if (expenses[i] > 0) {
+        ctx.fillStyle = 'rgba(220,38,38,0.35)';
+        ctx.fillRect(cx - barW, y(0), barW * 2, Math.abs(y(expenses[i]) - y(0)));
+      }
+    }
+  }
+
+  /* ─── resize 时用缓存数据重绘 ─── */
+  var resizeTimeout;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(function() {
+      if (dashboardCache) {
+        drawTrendChart(dashboardCache.cashflow_forecast.daily_series);
+      }
+    }, 300);
+  });
+
+  /* ══════════════════ 经营分析报告 ══════════════════ */
+  var REPORT_API = '/yyy/report';
+
+  // 对话完成后自动保存报告
+  async function saveReportToBackend() {
+    if (!fullText || fullText.length < 50) return;
+    try {
+      var fd = new FormData();
+      fd.append('content', fullText);
+      var resp = await fetch(REPORT_API + '/save', { method: 'POST', body: fd });
+      if (resp.ok) {
+        var data = await resp.json();
+        console.log('[report] 保存成功, id=' + data.id);
+        // 如果当前在报告页，刷新显示
+        if (document.getElementById('page-report').classList.contains('active')) {
+          loadReport();
+        }
+      }
+    } catch (e) {
+      console.error('[report] 保存失败:', e);
+    }
+  }
+
+  async function loadReport() {
+    try {
+      var resp = await fetch(REPORT_API + '/latest');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      var data = await resp.json();
+
+      if (!data || data.error) {
+        document.getElementById('reportDetail').style.display = 'none';
+        document.getElementById('reportEmpty').style.display = '';
+        document.getElementById('reportEmpty').innerHTML = '📭 暂无分析报告<br><span style="font-size:12px;">完成一次 AI 对话后，报告将自动保存到这里</span>';
+        return;
+      }
+
+      document.getElementById('reportEmpty').style.display = 'none';
+      document.getElementById('reportDetail').style.display = '';
+      document.getElementById('reportTime').textContent = data.created_at ? data.created_at.slice(0, 10) : '---';
+      renderReportDetail(data);
+
+    } catch (e) {
+      console.error('[report] 加载失败:', e);
+      document.getElementById('reportEmpty').textContent = '加载失败，请重试';
+    }
+  }
+
+  function renderReportDetail(data) {
+    if (!data || data.error) {
+      document.getElementById('reportDetail').style.display = 'none';
+      document.getElementById('reportEmpty').style.display = '';
+      document.getElementById('reportEmpty').textContent = data ? data.error : '暂无数据';
+      return;
+    }
+
+    document.getElementById('reportDetail').style.display = '';
+    document.getElementById('reportEmpty').style.display = 'none';
+    document.getElementById('reportTitle').textContent = data.title || '经营分析报告';
+    document.getElementById('reportTime').textContent = data.created_at ? data.created_at.slice(0, 10) : '---';
+
+    var ed = data.extracted_data || {};
+
+    // ── KPI 快速概览卡片 ──
+    var kpisHtml = _buildKpiCards(ed);
+    document.getElementById('reportKpis').innerHTML = kpisHtml;
+
+    // ── 合同营收 ──
+    var contractHtml = _buildContractSection(ed);
+    // ── 采购支出 ──
+    var purchaseHtml = _buildPurchaseSection(ed);
+    // ── 现金流分析 ──
+    var cashflowHtml = _buildCashflowSection(ed);
+    // ── 风险 & 建议 ──
+    var insightsHtml = _buildRiskSuggestions(ed);
+    // ── 总结 ──
+    var conclusionHtml = _buildConclusion(ed);
+
+    document.getElementById('reportInsights').innerHTML =
+      contractHtml + purchaseHtml + cashflowHtml + insightsHtml + conclusionHtml;
+
+    // 原始文本
+    document.getElementById('reportRaw').textContent = data.content_raw || '---';
+  }
+
+  function _buildKpiCards(ed) {
+    // 从所有子结构中收集 KPI 数值
+    var kpis = {};
+
+    // 从 financial_overview
+    var fo = ed.financial_overview || {};
+    if (fo.total_contract_amount) kpis['总合同金额'] = { value: fo.total_contract_amount, icon: '📋' };
+    if (fo.completed_collection) kpis['已完成收款'] = { value: fo.completed_collection, icon: '✅' };
+    if (fo.pending_collection) kpis['待收回款'] = { value: fo.pending_collection, icon: '📬', cls: 'warning' };
+
+    // 从 contract_revenue
+    var cr = ed.contract_revenue || {};
+    if (cr.total_contract_amount && !kpis['总合同金额']) kpis['总合同金额'] = { value: cr.total_contract_amount, icon: '📋' };
+    if (cr.pending_ratio != null) kpis['待收占比'] = { value: cr.pending_ratio, icon: '📊', unit: '%' };
+
+    // 从 purchase_expense
+    var pe = ed.purchase_expense || {};
+    if (pe.total_purchase_amount) kpis['采购总支出'] = { value: pe.total_purchase_amount, icon: '📦' };
+
+    // 从 cashflow_analysis
+    var cf = ed.cashflow_analysis || {};
+    if (cf.start_balance) kpis['期初余额'] = { value: cf.start_balance, icon: '🏁' };
+    if (cf.expected_income) kpis['预计收入'] = { value: cf.expected_income, icon: '📈', cls: 'positive' };
+    if (cf.expected_expense) kpis['预计支出'] = { value: cf.expected_expense, icon: '📉', cls: 'negative' };
+    if (cf.end_balance) kpis['期末余额'] = { value: cf.end_balance, icon: '🎯', cls: 'positive' };
+    if (cf.net_cashflow) kpis['净现金流'] = { value: cf.net_cashflow, icon: '💧', cls: cf.net_cashflow >= 0 ? 'positive' : 'negative' };
+    if (cf.growth_rate) kpis['增长率'] = { value: cf.growth_rate, icon: '🚀', unit: '%', cls: cf.growth_rate >= 0 ? 'positive' : 'negative' };
+
+    // 从 conclusion
+    var conc = ed.conclusion || {};
+    if (conc.net_cashflow && !kpis['净现金流']) kpis['净现金流'] = { value: conc.net_cashflow, icon: '💧' };
+    if (conc.end_balance && !kpis['期末余额']) kpis['期末余额'] = { value: conc.end_balance, icon: '🎯', cls: 'positive' };
+
+    var keys = Object.keys(kpis);
+    if (keys.length === 0) {
+      return '<div style="grid-column:1/-1;text-align:center;color:#94a3b8;font-size:13px;padding:20px;">未提取到 KPI 数据</div>';
+    }
+
+    return keys.map(function(key) {
+      var k = kpis[key];
+      var cls = k.cls || '';
+      return '<div class="report-kpi-item">' +
+        '<div class="report-kpi-label">' + (k.icon || '📌') + ' ' + key + '</div>' +
+        '<div class="report-kpi-value ' + cls + '">' +
+          fmtMoney(k.value) +
+          (k.unit ? '<span class="report-kpi-unit">' + k.unit + '</span>' : '<span class="report-kpi-unit">元</span>') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function _buildContractSection(ed) {
+    var cr = ed.contract_revenue || {};
+    if (!cr.total_contract_amount && !cr.projects) return '';
+
+    var html = '<div class="report-section">' +
+      '<div class="report-section-title">📋 合同与营收</div>';
+
+    if (cr.projects && cr.projects.length > 0) {
+      html += '<table class="report-table"><thead><tr><th>项目</th><th>金额</th><th>详情</th></tr></thead><tbody>';
+      cr.projects.forEach(function(p) {
+        html += '<tr><td>' + escHtml(p.name || '') + '</td>' +
+          '<td style="font-weight:600">' + fmtMoney(p.amount) + '</td>' +
+          '<td style="font-size:11px;color:#64748b">' + escHtml(p.detail || '') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function _buildPurchaseSection(ed) {
+    var pe = ed.purchase_expense || {};
+    if (!pe.total_purchase_amount && !pe.categories) return '';
+
+    var html = '<div class="report-section">' +
+      '<div class="report-section-title">📦 采购与支出</div>';
+
+    if (pe.categories && pe.categories.length > 0) {
+      html += '<table class="report-table"><thead><tr><th>类别</th><th>金额</th><th>占比</th></tr></thead><tbody>';
+      pe.categories.forEach(function(c) {
+        html += '<tr><td>' + escHtml(c.name || '') + '</td>' +
+          '<td style="font-weight:600">' + fmtMoney(c.amount) + '</td>' +
+          '<td>' + (c.ratio != null ? c.ratio + '%' : '---') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    }
+
+    if (pe.payment_rhythm && pe.payment_rhythm.length > 0) {
+      html += '<div class="report-sub-title">付款节奏</div>';
+      pe.payment_rhythm.forEach(function(r) {
+        html += '<div class="report-item">📅 ' + escHtml(r) + '</div>';
+      });
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function _buildCashflowSection(ed) {
+    var cf = ed.cashflow_analysis || {};
+    if (!cf.start_balance && !cf.expected_income && !cf.key_dates) return '';
+
+    var html = '<div class="report-section">' +
+      '<div class="report-section-title">💧 现金流分析</div>';
+
+    // 月度预测摘要
+    if (cf.monthly_forecast) {
+      var mf = cf.monthly_forecast;
+      html += '<div class="cashflow-summary">' +
+        '<div class="cf-row"><span>期初</span><span>' + fmtMoney(mf.start_balance) + '</span></div>' +
+        '<div class="cf-row income"><span>+ 收入</span><span>+' + fmtMoney(mf.income) + '</span></div>' +
+        '<div class="cf-row expense"><span>- 支出</span><span>-' + fmtMoney(mf.expense) + '</span></div>' +
+        '<div class="cf-row net"><span>= 净流入</span><span>' + (mf.net_cashflow >= 0 ? '+' : '') + fmtMoney(mf.net_cashflow) + '</span></div>' +
+        '<div class="cf-row end"><span>期末</span><span>' + fmtMoney(mf.end_balance) + '</span></div>' +
+      '</div>';
+    }
+
+    // 关键日期
+    if (cf.key_dates && cf.key_dates.length > 0) {
+      html += '<div class="report-sub-title">📅 关键现金流节点</div>';
+      cf.key_dates.forEach(function(d) {
+        html += '<div class="report-item"><strong>' + escHtml(d.date) + '</strong>：' +
+          escHtml(d.description) +
+          (d.amount ? ' <span style="font-weight:600;color:' + (d.amount >= 0 ? '#16a34a' : '#dc2626') + '">' + (d.amount >= 0 ? '+' : '') + fmtMoney(d.amount) + '</span>' : '') +
+        '</div>';
+      });
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function _buildRiskSuggestions(ed) {
+    var html = '';
+    var hasContent = false;
+
+    // ── 风险分析 ──
+    var risk = ed.risk_analysis || {};
+    if (risk.risk_categories && risk.risk_categories.length > 0) {
+      hasContent = true;
+      html += '<div class="report-section">' +
+        '<div class="report-section-title">⚠ 财务风险</div>';
+      risk.risk_categories.forEach(function(rc) {
+        html += '<div class="report-sub-title risk">🔴 ' + escHtml(rc.category) + '</div>';
+        (rc.items || []).forEach(function(item) {
+          html += '<div class="report-item risk-item">' + escHtml(item) + '</div>';
+        });
+      });
+      html += '</div>';
+    } else if (risk.all_risks && risk.all_risks.length > 0) {
+      hasContent = true;
+      html += '<div class="report-section">' +
+        '<div class="report-section-title">⚠ 财务风险</div>';
+      risk.all_risks.forEach(function(r) {
+        html += '<div class="report-item risk-item">🔴 ' + escHtml(r) + '</div>';
+      });
+      html += '</div>';
+    }
+
+    // ── 优化建议 ──
+    var sug = ed.suggestions || {};
+    if (sug.suggestion_categories && sug.suggestion_categories.length > 0) {
+      hasContent = true;
+      html += '<div class="report-section">' +
+        '<div class="report-section-title">💡 优化建议</div>';
+      sug.suggestion_categories.forEach(function(sc) {
+        html += '<div class="report-sub-title suggestion">✅ ' + escHtml(sc.category) + '</div>';
+        (sc.items || []).forEach(function(item) {
+          html += '<div class="report-item suggestion-item">' + escHtml(item) + '</div>';
+        });
+      });
+      html += '</div>';
+    } else if (sug.all_suggestions && sug.all_suggestions.length > 0) {
+      hasContent = true;
+      html += '<div class="report-section">' +
+        '<div class="report-section-title">💡 优化建议</div>';
+      sug.all_suggestions.forEach(function(s) {
+        html += '<div class="report-item suggestion-item">✅ ' + escHtml(s) + '</div>';
+      });
+      html += '</div>';
+    }
+
+    if (!hasContent) {
+      html = '<div style="color:#94a3b8;font-size:13px;padding:12px 0;">未提取到风险预警或建议信息</div>';
+    }
+    return html;
+  }
+
+  function _buildConclusion(ed) {
+    var conc = ed.conclusion || {};
+    if (!conc.text) return '';
+
+    var html = '<div class="report-section">' +
+      '<div class="report-section-title">📝 总结</div>' +
+      '<div class="report-conclusion">' + escHtml(
+        conc.text.replace(/^##+\s*总结\s*/i, '').replace(/^##+\s*五[、\.]\s*总结\s*/i, '').trim()
+      ) + '</div>' +
+    '</div>';
+    return html;
+  }
+
+  /* ─── 初始化 ─── */
+  loadDashboard();
 </script>
 </body>
 </html>

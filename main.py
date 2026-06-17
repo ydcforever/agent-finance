@@ -24,6 +24,8 @@ from server.routers import (
     tax_expense_router,
     ai_chat_workbuddy_router,
     ai_chat_coze_router,
+    dashboard_router,
+    analysis_report_router,
 )
 
 @asynccontextmanager
@@ -78,6 +80,8 @@ app.include_router(cash_flow_router)
 app.include_router(tax_expense_router)
 app.include_router(ai_chat_workbuddy_router)
 app.include_router(ai_chat_coze_router)
+app.include_router(dashboard_router)
+app.include_router(analysis_report_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

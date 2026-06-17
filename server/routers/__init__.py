@@ -12,3 +12,5 @@ from .cash_flow import router as cash_flow_router
 from .tax_expense import router as tax_expense_router
 from .ai_chat_workbuddy import router as ai_chat_workbuddy_router
 from .ai_chat_coze import router as ai_chat_coze_router
+from .dashboard import router as dashboard_router
+from .analysis_report import router as analysis_report_router

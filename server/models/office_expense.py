@@ -16,7 +16,7 @@ class OfficeExpense(Base):
     expense_name: Mapped[str] = mapped_column(String(255), comment="费用名称")
     address: Mapped[str] = mapped_column(String(255), comment="地址")
     fiscal_month: Mapped[str] = mapped_column(String(7), comment="财务月份")
-    billing_cycle: Mapped[str] = mapped_column(String(7), comment="计费周期")
+    billing_cycle: Mapped[str] = mapped_column(String(255), comment="计费周期")
     billing_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0, comment="账单金额")
     expected_payment_date: Mapped[date] = mapped_column(Date, comment="预计付款日期")
     payment_status: Mapped[str] = mapped_column(String(50), comment="付款状态")

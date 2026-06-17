@@ -10,3 +10,4 @@ from .bank_transaction import BankTransaction
 from .loan import Loan
 from .private_txs import PrivateTxs
 from .cash_flow import CashFlow
+from .analysis_report import AnalysisReport

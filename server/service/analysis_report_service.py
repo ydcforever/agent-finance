@@ -404,9 +404,39 @@ def _generate_title(text: str) -> str:
 #  对外接口
 # ══════════════════════════════════════════════════════════════
 
-def save_report(db: Session, ai_text: str) -> AnalysisReport:
-    """从 AI 对话文本中提取并保存经营分析报告（仅保留最新一份）"""
+def _is_valid_report(extracted: dict) -> bool:
+    """检查提取的数据是否包含足够的有效财务信息，以判断是否为经营分析报告"""
+    if not extracted:
+        return False
+
+    # 统计有效字段数（嵌套也算）
+    def _count_valid(obj) -> int:
+        if isinstance(obj, dict):
+            return sum(_count_valid(v) for v in obj.values())
+        if isinstance(obj, list):
+            return sum(_count_valid(v) for v in obj)
+        return 1 if obj is not None else 0
+
+    valid_count = _count_valid(extracted)
+    logger.info("[analysis_report] 提取到有效字段数: %d", valid_count)
+
+    # 至少需要 5 个有效字段才认为是经营分析报告
+    # （一个真正的经营分析报告通常有 20+ 个字段）
+    return valid_count >= 5
+
+
+def save_report(db: Session, ai_text: str) -> Optional[AnalysisReport]:
+    """从 AI 对话文本中提取并保存经营分析报告（仅保留最新一份）
+    
+    如果 AI 输出不包含足够的财务分析数据，则不会覆盖已有报告，
+    返回 None 表示未保存。
+    """
     extracted = extract_from_text(ai_text)
+
+    if not _is_valid_report(extracted):
+        logger.info("[analysis_report] 提取数据不足，跳过保存（非经营分析报告）")
+        return None
+
     title = _generate_title(ai_text)
 
     # 删除所有旧报告，只保留最新一份

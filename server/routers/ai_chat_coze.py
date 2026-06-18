@@ -122,11 +122,16 @@ async def coze_stream_chat(
         file_bytes = await f.read()
         await f.seek(0)  # 重置指针，供 Coze 上传使用
 
-        # ── Excel 文件：先解析入库 ──
+        # ── Excel 文件：先验证并解析入库 ──
         if f.filename and f.filename.lower().endswith(".xlsx"):
             try:
-                import_uploaded_file_to_db(file_bytes, f.filename, db)
-                logger.info("[coze_chat] Excel 入库完成: %s", f.filename)
+                result = import_uploaded_file_to_db(file_bytes, f.filename, db)
+                if result.get("skipped"):
+                    logger.info("[coze_chat] Excel 非财务报告，跳过入库: %s, reason=%s",
+                                f.filename, result.get("reason"))
+                else:
+                    logger.info("[coze_chat] Excel 入库完成: %s, 总行数=%d",
+                                f.filename, result.get("total", 0))
             except Exception as e:
                 logger.exception("[coze_chat] Excel 入库异常: %s", f.filename)
 

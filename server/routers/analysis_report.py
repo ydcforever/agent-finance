@@ -26,9 +26,12 @@ def api_save_report(
 ):
     """
     从 AI 对话输出文本中提取结构化数据，保存为经营分析报告（仅保留最新一份）。
-    返回保存后的报告 ID 和提取的数据。
+    如果 AI 输出不包含足够的财务分析数据，则不保存已有报告。
+    返回保存后的报告 ID 和提取的数据，或 skipped=True 表示跳过。
     """
     report = save_report(db, content)
+    if report is None:
+        return {"skipped": True, "message": "非经营分析报告，已跳过保存"}
     return {
         "id": report.id,
         "title": report.title,

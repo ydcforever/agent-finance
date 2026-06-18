@@ -1817,10 +1817,14 @@
       var resp = await fetch(REPORT_API + '/save', { method: 'POST', body: fd });
       if (resp.ok) {
         var data = await resp.json();
-        console.log('[report] 保存成功, id=' + data.id);
-        // 如果当前在报告页，刷新显示
-        if (document.getElementById('page-report').classList.contains('active')) {
-          loadReport();
+        if (data.skipped) {
+          console.log('[report] 非经营分析报告，跳过保存');
+        } else {
+          console.log('[report] 保存成功, id=' + data.id);
+          // 如果当前在报告页，刷新显示
+          if (document.getElementById('page-report').classList.contains('active')) {
+            loadReport();
+          }
         }
       }
     } catch (e) {

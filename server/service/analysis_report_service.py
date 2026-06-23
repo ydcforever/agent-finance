@@ -15,6 +15,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from server.models.analysis_report import AnalysisReport
+from server.service.project_profit_service import ProjectProfitService
 
 logger = logging.getLogger(__name__)
 
@@ -404,6 +405,57 @@ def _generate_title(text: str) -> str:
 #  对外接口
 # ══════════════════════════════════════════════════════════════
 
+def _inject_realtime_cost_data(db: Session, extracted: dict) -> dict:
+    """从数据库获取真实的采购成本、人工成本、行政费用等，注入到 extracted_data 的 purchase_expense 中。
+    
+    这确保"采购与支出"显示的是数据库中真实数据，而非从 AI 文本中不可靠地解析。
+    """
+    if not extracted:
+        return extracted
+
+    svc = ProjectProfitService(db)
+    cost = svc._calc_cost_structure()
+    summary = svc._calc_summary_cards()
+
+    # 构建真实的采购与支出 categories（和项目成本利润分析一致的数据源）
+    real_categories = []
+    for cat in cost.get("categories", []):
+        if cat.get("value", 0) > 0:
+            real_categories.append({
+                "name": cat["name"],
+                "amount": cat["value"],
+                "ratio": cat["percent"],
+            })
+
+    # 如果数据库有成本数据，覆盖 AI 提取的 purchase_expense
+    if real_categories:
+        extracted["purchase_expense"] = {
+            "total_purchase_amount": summary.get("purchase_cost"),
+            "total_cost": summary.get("total_cost"),
+            "labor_cost": summary.get("labor_cost"),
+            "office_cost": summary.get("office_cost"),
+            "tax_cost": summary.get("tax_cost"),
+            "logistics_cost": summary.get("logistics_cost"),
+            "categories": real_categories,
+            "data_source": "database",  # 标记数据来源
+        }
+
+    # 同时用真实合同数据补充 financial_overview 和 contract_revenue
+    if not extracted.get("financial_overview") or not extracted["financial_overview"].get("total_contract_amount"):
+        extracted["financial_overview"] = extracted.get("financial_overview") or {}
+        extracted["financial_overview"]["total_contract_amount"] = summary.get("total_contract")
+        extracted["financial_overview"]["completed_collection"] = summary.get("total_received")
+        extracted["financial_overview"]["pending_collection"] = summary.get("total_unreceived")
+
+    if not extracted.get("contract_revenue") or not extracted["contract_revenue"].get("total_contract_amount"):
+        extracted["contract_revenue"] = extracted.get("contract_revenue") or {}
+        extracted["contract_revenue"]["total_contract_amount"] = summary.get("total_contract")
+        extracted["contract_revenue"]["completed_collection"] = summary.get("total_received")
+        extracted["contract_revenue"]["pending_collection"] = summary.get("total_unreceived")
+
+    return extracted
+
+
 def _is_valid_report(extracted: dict) -> bool:
     """检查提取的数据是否包含足够的有效财务信息，以判断是否为经营分析报告"""
     if not extracted:
@@ -437,6 +489,9 @@ def save_report(db: Session, ai_text: str) -> Optional[AnalysisReport]:
         logger.info("[analysis_report] 提取数据不足，跳过保存（非经营分析报告）")
         return None
 
+    # 注入数据库中真实的采购/成本数据，覆盖 AI 文本提取的不可靠数据
+    extracted = _inject_realtime_cost_data(db, extracted)
+
     title = _generate_title(ai_text)
 
     # 删除所有旧报告，只保留最新一份
@@ -464,11 +519,15 @@ def get_latest_report(db: Session) -> Optional[dict]:
     )
     if not report:
         return None
+
+    # 注入实时成本数据（数据库中的采购/成本可能比报告保存时更新）
+    extracted = _inject_realtime_cost_data(db, report.extracted_data or {})
+
     return {
         "id": report.id,
         "title": report.title,
         "content_raw": report.content_raw,
-        "extracted_data": report.extracted_data,
+        "extracted_data": extracted,
         "created_at": report.created_at.isoformat() if report.created_at else None,
     }
 

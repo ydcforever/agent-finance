@@ -6,8 +6,10 @@ import io
 import os
 import logging
 from typing import List, Optional, Union, IO
-from fastapi import APIRouter, UploadFile, Form, File
+from urllib.parse import unquote
+from fastapi import APIRouter, UploadFile, Form, File, HTTPException, Query
 from fastapi.responses import StreamingResponse
+import httpx
 import json
 import pandas as pd
 
@@ -16,6 +18,7 @@ from cloud_agent_sdk import (
     RuntimeCreateOptions,
     ManifestBuilder,
     PromptOptions,
+    Runtime,
 )
 from pydantic.fields import FieldInfo
 from acp import PromptResponse
@@ -47,6 +50,9 @@ client = CloudAgentClient(api_key="ck_fns0v3cj85c0.wJgHcpGwka0JXdp9wWiYb3SeLASXk
                            source_app="formula-finance")
 
 MAX_SSE_CHUNK_SIZE = 4096
+
+# 持活 runtime 引用，供文件下载代理使用
+_active_runtimes: dict[str, Runtime] = {}
 
 
 def _split_text_to_chunks(text: str, max_chunk: int) -> List[str]:
@@ -122,12 +128,33 @@ def build_message_with_excel(
     return [TextContentBlock(type="text", text=full_prompt)]
 
 
-_RESOURCE_LINK_HINT = (
-    "当你需要向用户返回文件（如 Excel、PDF、图片等）时，"
-    "请始终使用 resource_link 类型（只返回文件的访问 URI），"
-    "不要将文件内容以 base64 编码直接内嵌在消息体中（即不使用 resource 内嵌类型）。"
-    "直接内嵌大文件会使单条 SSE 消息超过服务端 64KB 传输限制，导致连接中断。"
-    "文件 URI 示例：oss://bucket/path/to/file.xlsx 或 https://cdn.example.com/file.pdf"
+_SYSTEM_PROMPT = (
+    "你是一个专业的财务数据分析助手。请遵循以下规则：\n\n"
+    "## 核心工作流程\n"
+    "当用户上传 Excel 文件并要求分析时，你**必须**按以下步骤操作：\n\n"
+    "### 第1步：保存 Excel 数据\n"
+    "将用户提供的 Excel 数据保存为文件到工作目录（如 /workspace/data.xlsx）。\n\n"
+    "### 第2步：生成 HTML 报告文件\n"
+    "使用 write_file 工具生成一份完整的财务分析 HTML 报告文件。报告应包含以下内容：\n"
+    "- 带 CSS 样式的专业排版（表格、卡片、颜色标识）\n"
+    "- 盈利能力分析（营收、利润、毛利率、净利率、ROE、ROA 趋势表）\n"
+    "- 资产负债分析（总资产、负债、权益、资产负债率趋势表）\n"
+    "- 现金流分析（经营/投资/筹资现金流、自由现金流、现金余额趋势表）\n"
+    "- 每股指标（EPS、每股净资产、资产周转率）\n"
+    "- 风险与机遇分析\n"
+    "- 每个指标表格附带文字分析解读\n"
+    "文件保存路径：/workspace/reports/financial_report.html\n\n"
+    "### 第3步：返回文件链接\n"
+    "报告文件生成后，**必须**使用 resource_link 类型将文件的 URI 返回给用户。\n"
+    "URI 格式：file:///workspace/reports/financial_report.html\n"
+    "mime_type 设为 \"text/html\"，name 设为 \"financial_report.html\"。\n\n"
+    "### 第4步：输出文字摘要\n"
+    "同时在文字回复中给出报告的核心摘要（营收、利润、关键发现、风险提示等），方便用户快速了解要点。\n\n"
+    "## 重要规则\n"
+    "- 必须使用 resource_link 返回文件，**禁止**使用 resource 内嵌 base64（会导致传输中断）\n"
+    "- 文字摘要要简洁，详细数据在 HTML 报告里查看\n"
+    "- 必须先写文件再用 resource_link 返回，不要只在文字中输出报告内容\n"
+    "- HTML 报告要美观专业，支持移动端和打印"
 )
 
 
@@ -137,7 +164,7 @@ async def create_runtime():
         .id("agent_01KSSBM63DYZ563SPK088Y3YWW")
         .name("My Agent")
         .version("1.0")
-        .system_prompt(_RESOURCE_LINK_HINT)
+        .system_prompt(_SYSTEM_PROMPT)
         .build()
     )
     return await client.runtimes.create(
@@ -171,154 +198,91 @@ async def stream_ai_chat(
     queue: asyncio.Queue = asyncio.Queue()
 
     async def prompt_task():
+        runtime = None
         try:
             runtime = await create_runtime()
+            runtime_id = runtime.id
+            _active_runtimes[runtime_id] = runtime
+            logger.info("Runtime %s 已创建并缓存", runtime_id)
+
             session = runtime.sessions.default()
 
+            # 收集 agent 完整回复文本（类似 workbuddy.py 中的 agent_response）
+            agent_response_text = ""
+
             def on_chunk(notification: SessionNotification) -> None:
-                try:
-                    _on_chunk_impl(notification)
-                except Exception:
-                    # 单个 chunk 解析失败不应中断整个流
-                    logger.exception("[ai_chat] on_chunk 回调异常，已跳过")
-
-            def _on_chunk_impl(notification: SessionNotification) -> None:
-                """基于 ACP 官方协议 SessionUpdate 变体处理通知。
+                """将每个 ACP SessionNotification 的 update 完整序列化为 SSE 事件。
                 
-                SessionUpdate 联合类型（由 session_update 字段区分）：
-                - agent_message_chunk (AgentMessageChunk): content: ContentBlock (text/resource_link/resource/image/audio)
-                - agent_thought_chunk (AgentThoughtChunk): 同上（思维链）
-                - user_message_chunk  (UserMessageChunk):  同上（回显用户消息）
-                - tool_call           (ToolCallStart):      tool_call_id, title, kind, status, content, locations, raw_input
-                - tool_call_update    (ToolCallProgress):    tool_call_id + 可选 content/status/raw_input/raw_output/locations
-                - plan                (AgentPlanUpdate):    entries[]
-                - usage_update        (UsageUpdate):        used, size, cost?
-                - current_mode_update (CurrentModeUpdate):  current_mode_id
-                - config_option_update(ConfigOptionUpdate): config_options
-                - available_commands_update: available_commands
-                - session_info_update: session 元信息
+                不再手动 getattr 抽取字段 —— 直接用 Pydantic model_dump()
+                保留 ACP 协议原生完整结构，前端可以拿到：
+                - agent_message_chunk / agent_thought_chunk: content + messageId + _meta
+                - tool_call: toolCallId + title + kind + status + content + locations + rawInput + _meta
+                - tool_call_update: toolCallId + content + kind + locations + rawInput + rawOutput + status + title + _meta
+                - plan: entries[] (每个 entry: content + priority + status + _meta)
+                - usage_update: used + size + cost + _meta
+                - current_mode_update / config_option_update / available_commands_update / session_info_update
                 """
+                nonlocal agent_response_text
                 update = notification.update
-                session_update = getattr(update, "session_update", None)
 
-                # ---- agent_message_chunk / agent_thought_chunk ----
-                # 流式输出：文本 / resource_link / resource
-                if session_update in ("agent_message_chunk", "agent_thought_chunk"):
-                    content = getattr(update, "content", None)
-                    if content is None:
-                        return
-                    content_type = getattr(content, "type", None)
+                # 序列化完整的 update 模型（Pydantic by_alias=False 使用 Python 字段名）
+                update_dict = update.model_dump(mode="json", exclude_none=True, by_alias=False)
 
-                    # 纯文本
+                # 提取 session_update 类型作为 SSE 事件类型标识
+                session_update = update_dict.get("session_update")
+
+                # ---- 文本内容：对大文本做分片处理，防止单条 SSE 过大 ----
+                if session_update in ("agent_message_chunk", "agent_thought_chunk", "user_message_chunk"):
+                    content = update_dict.get("content", {})
+                    content_type = content.get("type")
+
                     if content_type == "text":
-                        text = getattr(content, "text", "") or ""
-                        for part in _split_text_to_chunks(text, MAX_SSE_CHUNK_SIZE):
-                            queue.put_nowait(json.dumps(
-                                {"type": "chunk", "text": part}, ensure_ascii=False
-                            ))
+                        text = content.get("text", "") or ""
 
-                    # 制品引用 —— 官方 ContentBlock: resource_link
-                    elif content_type == "resource_link":
-                        queue.put_nowait(json.dumps({
-                            "type":        "artifact",
-                            "name":        getattr(content, "name", ""),
-                            "uri":         getattr(content, "uri", ""),
-                            "mime_type":   getattr(content, "mime_type", None),
-                            "title":       getattr(content, "title", None),
-                            "description": getattr(content, "description", None),
-                            "size":        getattr(content, "size", None),
-                        }, ensure_ascii=False))
+                        # 累积 agent_message_chunk 文本到完整回复（不含 thought）
+                        if session_update == "agent_message_chunk":
+                            agent_response_text += text
 
-                    # 内嵌资源 —— 官方 ContentBlock: resource
-                    elif content_type == "resource":
-                        resource = getattr(content, "resource", None)
-                        if resource is not None:
-                            mime = getattr(resource, "mime_type", None)
-                            uri = getattr(resource, "uri", "")
-                            blob = getattr(resource, "blob", None)
-                            text_res = getattr(resource, "text", None)
-                            data_val = blob or text_res or ""
-                            enc = "base64" if blob is not None else "text"
-                            queue.put_nowait(json.dumps({
-                                "type":      "artifact_embedded",
-                                "mime_type": mime,
-                                "uri":       uri,
-                                "data":      data_val,
-                                "encoding":  enc,
-                            }, ensure_ascii=False))
+                        # 文本分片推送：将 update 中的 text 替换为分片后逐条发送
+                        parts = _split_text_to_chunks(text, MAX_SSE_CHUNK_SIZE)
+                        if len(parts) <= 1:
+                            # 无需分片，直接发送完整 update
+                            queue.put_nowait(json.dumps(update_dict, ensure_ascii=False))
+                        else:
+                            for i, part in enumerate(parts):
+                                chunk_dict = dict(update_dict)
+                                chunk_dict["content"] = dict(content)
+                                chunk_dict["content"]["text"] = part
+                                chunk_dict["_chunk_index"] = i
+                                chunk_dict["_chunk_total"] = len(parts)
+                                queue.put_nowait(json.dumps(chunk_dict, ensure_ascii=False))
+                    else:
+                        # 非文本类型（resource_link / resource / image / audio）
+                        # 注入 runtime_id 方便前端构造下载代理 URL
+                        if runtime_id:
+                            update_dict["_runtime_id"] = runtime_id
+                        queue.put_nowait(json.dumps(update_dict, ensure_ascii=False))
 
-                # ---- tool_call: 工具调用开始 ----
-                elif session_update == "tool_call":
-                    kind = getattr(update, "kind", None)
-                    title = getattr(update, "title", "")
-                    tool_call_id = getattr(update, "tool_call_id", "")
-                    locations = getattr(update, "locations", None) or []
-                    raw_input = getattr(update, "raw_input", None) or {}
-
-                    # 从 raw_input 提取 file_path（Write 工具）
-                    file_path = (
-                        raw_input.get("file_path", "")
-                        if isinstance(raw_input, dict)
-                        else ""
-                    )
-
-                    # 从 locations 提取路径
-                    paths = (
-                        [loc.path for loc in locations if hasattr(loc, "path")]
-                        if locations else []
-                    )
-                    if not paths and file_path:
-                        paths = [file_path]
-
-                    for p in paths:
-                        queue.put_nowait(json.dumps({
-                            "type":         "artifact_writing",
-                            "tool_call_id": tool_call_id,
-                            "path":         p,
-                            "title":        title,
-                            "kind":         kind,
-                        }, ensure_ascii=False))
-
-                # ---- tool_call_update: 工具调用状态更新 ----
-                elif session_update == "tool_call_update":
-                    status = getattr(update, "status", None)
-                    tool_call_id = getattr(update, "tool_call_id", "")
-
-                    # 工具完成
-                    if status == "completed":
-                        queue.put_nowait(json.dumps({
-                            "type":         "artifact_done",
-                            "tool_call_id": tool_call_id,
-                        }, ensure_ascii=False))
-
-                        # 同时检查 tool_call_update.content 里是否有 resource_link 制品
-                        tc_content = getattr(update, "content", None) or []
-                        for item in tc_content:
-                            if hasattr(item, "type") and item.type == "content":
-                                inner = getattr(item, "content", None)
-                                if inner is not None and getattr(inner, "type", None) == "resource_link":
-                                    queue.put_nowait(json.dumps({
-                                        "type":        "artifact",
-                                        "name":        getattr(inner, "name", ""),
-                                        "uri":         getattr(inner, "uri", ""),
-                                        "mime_type":   getattr(inner, "mime_type", None),
-                                        "title":       getattr(inner, "title", None),
-                                        "description": getattr(inner, "description", None),
-                                        "size":        getattr(inner, "size", None),
-                                    }, ensure_ascii=False))
-
-                    # 工具失败
-                    elif status == "failed":
-                        queue.put_nowait(json.dumps({
-                            "type":         "artifact_failed",
-                            "tool_call_id": tool_call_id,
-                        }, ensure_ascii=False))
+                # ---- tool_call / tool_call_update / plan / usage_update / 其他 ----
+                else:
+                    # 对 tool_call_update 也注入 runtime_id（可能包含 resource_link）
+                    if runtime_id and session_update in ("tool_call_update",):
+                        update_dict["_runtime_id"] = runtime_id
+                    # 直接发送完整 update 字典
+                    queue.put_nowait(json.dumps(update_dict, ensure_ascii=False))
 
             response = await session.prompt(
                 message_blocks,
                 PromptOptions(on_chunk=on_chunk, timeout_ms=120_000),
             )
-            queue.put_nowait(json.dumps({"type": "done", "stop_reason": response.stop_reason}))
+            # 发送完成事件：包含 stop_reason、完整 agent 回复文本、usage 信息、runtime_id
+            queue.put_nowait(json.dumps({
+                "type": "done",
+                "stop_reason": response.stop_reason,
+                "agent_response": agent_response_text,
+                "runtime_id": runtime_id,
+                "usage": response.usage.model_dump(mode="json", exclude_none=True, by_alias=False) if response.usage else None,
+            }, ensure_ascii=False))
         except Exception as exc:
             queue.put_nowait(json.dumps({"type": "error", "message": str(exc)}))
         finally:
@@ -338,3 +302,86 @@ async def stream_ai_chat(
                 prompt_runner.cancel()
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/download/{runtime_id}")
+async def download_file(
+    runtime_id: str,
+    uri: str = Query(..., description="沙箱内文件 URI，如 file:///workspace/report.xlsx"),
+):
+    """通过沙箱数据面代理下载 Agent 生成的文件。
+    
+    Agent 在沙箱内生成文件后通过 resource_link 返回 URI，
+    浏览器无法直接访问沙箱内部路径，需要后端通过数据面代理拉取。
+    """
+    runtime = _active_runtimes.get(runtime_id)
+    if runtime is None:
+        raise HTTPException(status_code=404, detail=f"Runtime {runtime_id} 不存在或已过期")
+
+    # 从 runtime info 中获取沙箱数据面端点
+    runtime_info = runtime.runtime_info
+    if runtime_info.links is None or runtime_info.links.sandbox_link is None:
+        raise HTTPException(status_code=400, detail="Runtime 未提供沙箱数据面连接信息")
+
+    sandbox = runtime_info.links.sandbox_link
+    data_plane = sandbox.data_plane_endpoint.rstrip("/")
+    sandbox_id = sandbox.sandbox_id
+
+    # 从 URI 中提取文件路径
+    file_path = uri
+    # 去掉常见的 URI scheme 前缀
+    for prefix in ("file://", "oss://", "sandbox://"):
+        if file_path.startswith(prefix):
+            file_path = file_path[len(prefix):]
+            break
+
+    # 确保路径以 / 开头
+    if not file_path.startswith("/"):
+        file_path = "/" + file_path
+
+    # 提取文件名用于 Content-Disposition
+    file_name = os.path.basename(file_path) or "download"
+
+    # 尝试多种数据面 URL 格式访问文件
+    url_candidates = [
+        f"{data_plane}/files?path={file_path}",
+        f"{data_plane}/v1/sandboxes/{sandbox_id}/files?path={file_path}",
+        f"{data_plane}/download?path={file_path}",
+    ]
+
+    last_error = None
+    async with httpx.AsyncClient(timeout=30.0) as http_client:
+        for candidate_url in url_candidates:
+            try:
+                logger.info("尝试从沙箱下载: %s", candidate_url)
+                response = await http_client.get(candidate_url)
+                if response.status_code == 200 and response.content:
+                    content_type = response.headers.get("content-type", "application/octet-stream")
+                    # URL 编码文件名，处理中文
+                    encoded_name = file_name.encode("ascii", "ignore").decode("ascii") or "download"
+                    if not encoded_name.strip():
+                        encoded_name = "download"
+                    content_disp = f'attachment; filename="{encoded_name}"; filename*=UTF-8\'\'{unquote(file_name)}'
+                    return StreamingResponse(
+                        io.BytesIO(response.content),
+                        media_type=content_type,
+                        headers={"Content-Disposition": content_disp},
+                    )
+                elif response.status_code == 200 and not response.content:
+                    logger.warning("沙箱返回 200 但内容为空: %s", candidate_url)
+                    continue
+                else:
+                    logger.warning("沙箱返回 %d: %s", response.status_code, candidate_url)
+                    continue
+            except Exception as exc:
+                last_error = exc
+                logger.warning("沙箱下载失败 %s: %s", candidate_url, exc)
+                continue
+
+    if last_error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"无法从沙箱下载文件 '{file_path}'，已尝试 {len(url_candidates)} 种 URL 格式。最后错误: {last_error}",
+        )
+    else:
+        raise HTTPException(status_code=502, detail=f"无法从沙箱下载文件 '{file_path}'，所有 URL 格式均失败")

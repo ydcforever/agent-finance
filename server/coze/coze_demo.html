@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>财务智控台 - 经营总览</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -818,6 +819,15 @@
     .rp-gap-result.safe .rp-gap-result-label,
     .rp-gap-result.safe .rp-gap-result-value { color: #16a34a; }
     .rp-gap-result-sub { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+
+    /* 状态标签 */
+    .status-tag {
+      display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 500;
+    }
+    .status-green { background: #d1fae5; color: #065f46; }
+    .status-blue  { background: #dbeafe; color: #1e40af; }
+    .status-orange { background: #fef3c7; color: #92400e; }
+    .status-red   { background: #fee2e2; color: #991b1b; }
   </style>
 </head>
 <body>
@@ -839,6 +849,9 @@
       </button>
       <button class="sidebar-nav-item" onclick="switchPage('report')">
         <span class="nav-icon">📊</span>经营分析报告
+      </button>
+      <button class="sidebar-nav-item" onclick="switchPage('projectProfit')">
+        <span class="nav-icon">📐</span>项目成本利润
       </button>
     </div>
   </div>
@@ -1124,6 +1137,58 @@
       </div>
     </div>
 
+    <!-- 页面5：项目成本利润分析 -->
+    <div class="page-panel" id="page-projectProfit">
+      <div class="card">
+        <div class="dashboard-header">
+          <div class="card-title" style="margin-bottom:0"><span class="dot" style="background:#2563eb"></span>项目成本利润分析</div>
+          <div class="dashboard-refresh">
+            数据刷新时间：<span id="ppRefreshTime">加载中...</span>
+            <a onclick="loadProjectProfit()">刷新</a>
+          </div>
+        </div>
+
+        <!-- ① 关键指标卡片 -->
+        <div class="kpi-row" id="ppKpiRow" style="margin-bottom:18px;">
+          <div class="kpi-card"><div class="kpi-label">合同总额</div><div class="kpi-value" id="ppTotalContract">---</div></div>
+          <div class="kpi-card"><div class="kpi-label">采购成本</div><div class="kpi-value" id="ppPurchaseCost">---</div></div>
+          <div class="kpi-card"><div class="kpi-label">总成本</div><div class="kpi-value" id="ppTotalCost">---</div></div>
+          <div class="kpi-card"><div class="kpi-label">估算利润</div><div class="kpi-value" id="ppProfit">---</div></div>
+        </div>
+
+        <!-- ② 成本结构饼图 + ③ 回款进度 -->
+        <div class="rp-two-col">
+          <!-- 成本费用结构占比 -->
+          <div class="card rp-card">
+            <div class="card-title"><span class="dot" style="background:#3b82f6"></span>成本费用结构占比</div>
+            <div style="max-width:320px;margin:0 auto 12px;">
+              <canvas id="ppPieChart" width="320" height="320"></canvas>
+            </div>
+            <div id="ppCostLegend" style="font-size:12px;color:#475569;"></div>
+          </div>
+
+          <!-- 项目回款进度条 -->
+          <div class="card rp-card">
+            <div class="card-title"><span class="dot" style="background:#16a34a"></span>项目回款进度</div>
+            <!-- 整体汇总 -->
+            <div id="ppOverallProgress" style="margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #f1f5f9;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span style="font-weight:600;font-size:13px;">整体回款进度</span>
+                <span style="font-size:13px;font-weight:600;color:#2563eb;" id="ppOverallPct">---</span>
+              </div>
+              <div style="height:12px;background:#e2e8f0;border-radius:6px;overflow:hidden;">
+                <div id="ppOverallBar" style="height:100%;border-radius:6px;background:#2563eb;width:0%;transition:width .5s;"></div>
+              </div>
+              <div id="ppOverallStats" style="display:flex;gap:16px;font-size:11px;color:#94a3b8;margin-top:6px;"></div>
+            </div>
+            <div id="ppProgressList" style="max-height:480px;overflow-y:auto;">
+              <div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">暂无回款数据</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </div>
@@ -1141,7 +1206,7 @@
     document.getElementById('page-' + pageId).classList.add('active');
 
     var navs = document.querySelectorAll('.sidebar-nav-item');
-    var pageMap = { chat: 0, dashboard: 1, receivable: 2, report: 3 };
+    var pageMap = { chat: 0, dashboard: 1, receivable: 2, report: 3, projectProfit: 4 };
     if (pageMap[pageId] !== undefined) {
       navs[pageMap[pageId]].classList.add('active');
     }
@@ -1159,6 +1224,10 @@
     // 切到收付款面板时加载
     if (pageId === 'receivable') {
       loadReceivablePanel();
+    }
+    // 切到项目成本利润时加载
+    if (pageId === 'projectProfit') {
+      loadProjectProfit();
     }
   }
 
@@ -2084,20 +2153,20 @@
 
   function _buildContractSection(ed) {
     var cr = ed.contract_revenue || {};
-    if (!cr.total_contract_amount && !cr.projects) return '';
+    var projects = cr.projects || [];
+    // 只有提取到具体项目列表时才显示此板块
+    if (projects.length === 0) return '';
 
     var html = '<div class="report-section">' +
       '<div class="report-section-title">📋 合同与营收</div>';
 
-    if (cr.projects && cr.projects.length > 0) {
-      html += '<table class="report-table"><thead><tr><th>项目</th><th>金额</th><th>详情</th></tr></thead><tbody>';
-      cr.projects.forEach(function(p) {
-        html += '<tr><td>' + escHtml(p.name || '') + '</td>' +
-          '<td style="font-weight:600">' + fmtMoney(p.amount) + '</td>' +
-          '<td style="font-size:11px;color:#64748b">' + escHtml(p.detail || '') + '</td></tr>';
-      });
-      html += '</tbody></table>';
-    }
+    html += '<table class="report-table"><thead><tr><th>项目</th><th>金额</th><th>详情</th></tr></thead><tbody>';
+    projects.forEach(function(p) {
+      html += '<tr><td>' + escHtml(p.name || '') + '</td>' +
+        '<td style="font-weight:600">' + fmtMoney(p.amount) + '</td>' +
+        '<td style="font-size:11px;color:#64748b">' + escHtml(p.detail || '') + '</td></tr>';
+    });
+    html += '</tbody></table>';
 
     html += '</div>';
     return html;
@@ -2232,6 +2301,159 @@
       ) + '</div>' +
     '</div>';
     return html;
+  }
+
+  /* ══════════════════ 项目成本利润分析 ══════════════════ */
+  var PROJECT_PROFIT_API = '/yyy/dashboard/project-profit';
+  var ppPieChart = null;
+
+  async function loadProjectProfit() {
+    try {
+      var resp = await fetch(PROJECT_PROFIT_API);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      var data = await resp.json();
+      renderProjectProfit(data);
+      document.getElementById('ppRefreshTime').textContent =
+        '数据刷新时间：' + new Date().toLocaleString('zh-CN');
+    } catch (e) {
+      console.error('[projectProfit] 加载失败:', e);
+      document.getElementById('ppRefreshTime').textContent = '加载失败';
+    }
+  }
+
+  function renderProjectProfit(data) {
+    // ① KPI 卡片
+    if (data.summary_cards) {
+      var sc = data.summary_cards;
+      document.getElementById('ppTotalContract').textContent = '¥' + fmtMoney(sc.total_contract);
+      document.getElementById('ppPurchaseCost').textContent = '¥' + fmtMoney(sc.purchase_cost);
+      document.getElementById('ppTotalCost').textContent = '¥' + fmtMoney(sc.total_cost);
+      var profitEl = document.getElementById('ppProfit');
+      profitEl.textContent = '¥' + fmtMoney(sc.estimated_profit) + ' (' + (sc.profit_rate || 0) + '%)';
+      // 颜色
+      if (sc.level === 'danger') {
+        profitEl.style.color = '#dc2626';
+        profitEl.parentElement.className = 'kpi-card danger';
+      } else if (sc.level === 'warning') {
+        profitEl.style.color = '#d97706';
+        profitEl.parentElement.className = 'kpi-card warning';
+      } else {
+        profitEl.style.color = '#16a34a';
+        profitEl.parentElement.className = 'kpi-card safe';
+      }
+      // 子标题
+      var contractCard = document.querySelector('#ppKpiRow .kpi-card:nth-child(1)');
+      if (contractCard) {
+        contractCard.querySelector('.kpi-label').innerHTML =
+          '合同总额 <span style="font-size:11px;color:#94a3b8;">已收 ¥' + fmtMoney(sc.total_received) + ' · 未收 ¥' + fmtMoney(sc.total_unreceived) + '</span>';
+      }
+    }
+
+    // ② 成本结构饼图
+    if (data.cost_structure && data.cost_structure.categories) {
+      var cats = data.cost_structure.categories.filter(function(c) { return c.value > 0; });
+      if (cats.length > 0) {
+        var labels = cats.map(function(c) { return c.name; });
+        var values = cats.map(function(c) { return c.value; });
+        var colors = cats.map(function(c) { return c.color || '#3b82f6'; });
+
+        var ctx = document.getElementById('ppPieChart').getContext('2d');
+        if (ppPieChart) ppPieChart.destroy();
+
+        ppPieChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: values,
+              backgroundColor: colors,
+              borderColor: '#fff',
+              borderWidth: 3,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(tooltipCtx) {
+                    var total = tooltipCtx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+                    var pct = total > 0 ? (tooltipCtx.raw / total * 100).toFixed(1) : '0.0';
+                    return tooltipCtx.label + ': ¥' + tooltipCtx.raw.toLocaleString() + ' (' + pct + '%)';
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        // 图例
+        var legendHtml = '';
+        cats.forEach(function(c, i) {
+          var clr = c.color || colors[i];
+          legendHtml += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:12px;">' +
+            '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + clr + ';margin-right:6px;"></span>' + escHtml(c.name) + '</span>' +
+            '<span style="color:#64748b;">¥' + fmtMoney(c.value) + ' · ' + c.percent + '%</span></div>';
+          // 采购成本拆解
+          if (c.breakdown && c.breakdown.length > 0) {
+            c.breakdown.forEach(function(b) {
+              legendHtml += '<div style="padding-left:20px;font-size:11px;color:#94a3b8;display:flex;justify-content:space-between;">' +
+                '<span>└ ' + escHtml(b.name) + '</span><span>¥' + fmtMoney(b.value) + '</span></div>';
+            });
+          }
+        });
+        document.getElementById('ppCostLegend').innerHTML = legendHtml;
+      }
+    }
+
+    // ③ 回款进度条
+    if (data.project_payments) {
+      var pp = data.project_payments;
+      var overall = pp.overall;
+      if (overall) {
+        document.getElementById('ppOverallPct').textContent = overall.progress_pct + '%';
+        document.getElementById('ppOverallBar').style.width = overall.progress_pct + '%';
+        document.getElementById('ppOverallBar').style.background =
+          overall.progress_pct >= 80 ? '#059669' : (overall.progress_pct >= 40 ? '#2563eb' : '#dc2626');
+        document.getElementById('ppOverallStats').innerHTML =
+          '<span>合同总额 <strong>¥' + fmtMoney(overall.total_contract) + '</strong></span>' +
+          '<span>已回款 <strong>¥' + fmtMoney(overall.total_received) + '</strong></span>' +
+          '<span>待回款 <strong>¥' + fmtMoney(overall.total_unreceived) + '</strong></span>';
+      }
+
+      var projects = pp.projects || [];
+      if (projects.length > 0) {
+        var listHtml = '';
+        projects.forEach(function(p) {
+          var statusClass = p.status_color === 'green' ? 'status-green' :
+                            p.status_color === 'blue'  ? 'status-blue'  :
+                            p.status_color === 'orange'? 'status-orange': 'status-red';
+          var barColor = p.progress_pct >= 100 ? '#059669' :
+                         p.progress_pct >= 60  ? '#2563eb' :
+                         p.progress_pct > 0    ? '#f59e0b' : '#ef4444';
+          listHtml +=
+            '<div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">' +
+                '<span style="font-weight:600;font-size:13px;">' + escHtml(p.customer_name) + ' · ' + escHtml(p.contract_name || p.contract_code) + '</span>' +
+                '<span style="font-size:12px;color:#64748b;">' +
+                  '<span class="status-tag ' + statusClass + '">' + p.status + '</span> ' +
+                  '¥' + fmtMoney(p.received) + ' / ¥' + fmtMoney(p.total_amount) +
+                '</span>' +
+              '</div>' +
+              '<div style="height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">' +
+                '<div style="height:100%;border-radius:4px;width:' + p.progress_pct + '%;background:' + barColor + ';transition:width .5s;"></div>' +
+              '</div>' +
+              '<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-top:3px;">' +
+                '<span>回款 ' + p.progress_pct + '%</span>' +
+                '<span>' + (p.expected_received_date ? '预计回款: ' + p.expected_received_date : '') + '</span>' +
+              '</div>' +
+            '</div>';
+        });
+        document.getElementById('ppProgressList').innerHTML = listHtml;
+      }
+    }
   }
 
   /* ─── 初始化 ─── */
